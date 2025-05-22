@@ -25,6 +25,9 @@ DOW_MAP = {0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday"
 REVERSE_DOW_MAP = {v: k for k, v in DOW_MAP.items()}
 ORDERED_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+# Hour labels for heatmap
+HOUR_LABELS = [f"{h % 12 or 12}{'am' if h < 12 else 'pm'}" for h in range(24)]
+
 # Function to load data from database
 def load_data():
     with engine.connect() as conn:
@@ -55,6 +58,10 @@ def load_data():
 print("Loading data from database...")
 departments_df, merged_df = load_data()
 
+# Add 'All Departments' option to dropdown
+all_departments_option = pd.DataFrame({'department': ['All Departments']})
+departments_dropdown_df = pd.concat([all_departments_option, departments_df], ignore_index=True)
+
 # Define the layout of the application
 # The layout is a tree of components that defines how the app looks
 app.layout = html.Div([
@@ -71,8 +78,8 @@ app.layout = html.Div([
                 id='department-dropdown',
                 # Get unique departments for the dropdown options
                 options=[{'label': dept, 'value': dept} 
-                        for dept in departments_df['department'].unique()],
-                value=departments_df['department'].iloc[0],  # Default value
+                        for dept in departments_dropdown_df['department'].unique()],
+                value='All Departments',
                 style={'width': '100%'}
             )
         ], style={'width': '30%', 'display': 'inline-block', 'margin': '10px'}),
@@ -117,7 +124,8 @@ app.layout = html.Div([
     
     # Heatmap of orders by day of week vs hour of day
     html.Div([
-        dcc.Graph(id='orders-heatmap')
+        dcc.Graph(id='orders-heatmap'),
+        html.Div(id='heatmap-stats', style={'marginTop': '20px', 'fontSize': '18px', 'textAlign': 'center'})
     ], style={'width': '100%', 'display': 'inline-block', 'marginTop': '40px'}),
     
     # Hidden div for storing intermediate data
@@ -133,7 +141,8 @@ app.layout = html.Div([
     # Output components that will be updated
     [Output('top-products-chart', 'figure'),
      Output('department-distribution-chart', 'figure'),
-     Output('orders-heatmap', 'figure')],
+     Output('orders-heatmap', 'figure'),
+     Output('heatmap-stats', 'children')],
     # Input components that will trigger the callback
     [Input('department-dropdown', 'value'),
      Input('product-count-slider', 'value'),
@@ -153,7 +162,10 @@ def update_graphs(selected_department, min_count, selected_day):
     - Two Plotly figure objects for the bar chart and pie chart
     """
     # Filter data based on selected department
-    filtered_df = merged_df[merged_df['department'] == selected_department]
+    if selected_department == 'All Departments':
+        filtered_df = merged_df.copy()
+    else:
+        filtered_df = merged_df[merged_df['department'] == selected_department]
     
     # Filter by day of week if not All Time
     if selected_day != 'All Time':
@@ -171,11 +183,14 @@ def update_graphs(selected_department, min_count, selected_day):
         'count': top_10.values
     })
     
+    bar_title = (f'Top Products in {selected_department}' if selected_department != 'All Departments' else 'Top Products (All Departments)')
+    if selected_day != 'All Time':
+        bar_title += f' on {selected_day}'
     bar_fig = px.bar(
         bar_df,
         x='product',
         y='count',
-        title=f'Top Products in {selected_department}' + (f' on {selected_day}' if selected_day != 'All Time' else ''),
+        title=bar_title,
         labels={'product': 'Product', 'count': 'Count'},
         template='plotly_white'
     )
@@ -187,10 +202,13 @@ def update_graphs(selected_department, min_count, selected_day):
     
     # Create department distribution pie chart (filtered by day)
     dept_dist = pie_df['department'].value_counts()
+    pie_title = 'Distribution of Orders Across Departments'
+    if selected_day != 'All Time':
+        pie_title += f' on {selected_day}'
     pie_fig = px.pie(
         values=dept_dist.values,
         names=dept_dist.index,
-        title='Distribution of Orders Across Departments' + (f' on {selected_day}' if selected_day != 'All Time' else ''),
+        title=pie_title,
         template='plotly_white'
     )
     pie_fig.update_layout(height=500)
@@ -209,6 +227,7 @@ def update_graphs(selected_department, min_count, selected_day):
     )
     # Reorder days for display
     pivot = pivot.reindex(ORDERED_DAYS)
+    pivot.columns = HOUR_LABELS  # Relabel columns to times
     heatmap_fig = px.imshow(
         pivot,
         labels=dict(x="Hour of Day", y="Day of Week", color="# Orders"),
@@ -218,7 +237,24 @@ def update_graphs(selected_department, min_count, selected_day):
     )
     heatmap_fig.update_layout(height=500)
     
-    return bar_fig, pie_fig, heatmap_fig
+    # Statistical summaries for the heatmap
+    values = pivot.values.flatten()
+    mode_idx = np.unravel_index(np.argmax(values), values.shape)
+    mode_day = pivot.index[mode_idx[0]]
+    mode_hour = pivot.columns[mode_idx[1]]
+    mode_count = values[mode_idx]
+    mean_count = np.mean(values)
+    median_count = np.median(values)
+    std_count = np.std(values)
+    stats_text = (
+        f"<b>Heatmap Statistical Summary:</b> "
+        f"<br>Peak: <b>{mode_day} at {mode_hour}</b> with <b>{mode_count:,}</b> orders"
+        f"<br>Mean: <b>{mean_count:.2f}</b> orders/cell"
+        f"<br>Median: <b>{median_count:.2f}</b> orders/cell"
+        f"<br>Std Dev: <b>{std_count:.2f}</b> orders/cell"
+    )
+    
+    return bar_fig, pie_fig, heatmap_fig, stats_text
 
 # Run the application
 if __name__ == '__main__':
