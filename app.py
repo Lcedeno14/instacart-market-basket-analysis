@@ -23,6 +23,7 @@ DAYS_OF_WEEK = [
 ]
 DOW_MAP = {0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday"}
 REVERSE_DOW_MAP = {v: k for k, v in DOW_MAP.items()}
+ORDERED_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 # Function to load data from database
 def load_data():
@@ -30,14 +31,15 @@ def load_data():
         # Load departments for dropdown
         departments_df = pd.read_sql_query("SELECT * FROM departments", conn)
         
-        # Load the merged data we need for visualizations, including order_dow
+        # Load the merged data we need for visualizations, including order_dow and order_hour_of_day
         query = """
         SELECT 
             op.product_id,
             p.product_name,
             d.department,
             d.department_id,
-            o.order_dow
+            o.order_dow,
+            o.order_hour_of_day
         FROM order_products op
         JOIN products p ON op.product_id = p.product_id
         JOIN departments d ON p.department_id = d.department_id
@@ -113,6 +115,11 @@ app.layout = html.Div([
         ], style={'width': '50%', 'display': 'inline-block'})
     ]),
     
+    # Heatmap of orders by day of week vs hour of day
+    html.Div([
+        dcc.Graph(id='orders-heatmap')
+    ], style={'width': '100%', 'display': 'inline-block', 'marginTop': '40px'}),
+    
     # Hidden div for storing intermediate data
     # This is a common pattern in Dash for storing data that doesn't need to be displayed
     html.Div(id='intermediate-data', style={'display': 'none'})
@@ -125,7 +132,8 @@ app.layout = html.Div([
 @app.callback(
     # Output components that will be updated
     [Output('top-products-chart', 'figure'),
-     Output('department-distribution-chart', 'figure')],
+     Output('department-distribution-chart', 'figure'),
+     Output('orders-heatmap', 'figure')],
     # Input components that will trigger the callback
     [Input('department-dropdown', 'value'),
      Input('product-count-slider', 'value'),
@@ -150,6 +158,9 @@ def update_graphs(selected_department, min_count, selected_day):
     # Filter by day of week if not All Time
     if selected_day != 'All Time':
         filtered_df = filtered_df[filtered_df['day_of_week'] == selected_day]
+        pie_df = merged_df[merged_df['day_of_week'] == selected_day]
+    else:
+        pie_df = merged_df
     
     # Create top products bar chart
     product_counts = filtered_df['product_name'].value_counts()
@@ -174,17 +185,40 @@ def update_graphs(selected_department, min_count, selected_day):
         margin=dict(b=100)  # Add bottom margin for rotated labels
     )
     
-    # Create department distribution pie chart
-    dept_dist = merged_df['department'].value_counts()
+    # Create department distribution pie chart (filtered by day)
+    dept_dist = pie_df['department'].value_counts()
     pie_fig = px.pie(
         values=dept_dist.values,
         names=dept_dist.index,
-        title='Distribution of Orders Across Departments',
+        title='Distribution of Orders Across Departments' + (f' on {selected_day}' if selected_day != 'All Time' else ''),
         template='plotly_white'
     )
     pie_fig.update_layout(height=500)
     
-    return bar_fig, pie_fig
+    # Create heatmap of orders by day of week vs hour of day
+    heatmap_df = merged_df.copy()
+    # Only use the 7 days, not 'All Time'
+    heatmap_df = heatmap_df[heatmap_df['day_of_week'].isin(ORDERED_DAYS)]
+    pivot = pd.pivot_table(
+        heatmap_df,
+        index='day_of_week',
+        columns='order_hour_of_day',
+        values='product_id',
+        aggfunc='count',
+        fill_value=0
+    )
+    # Reorder days for display
+    pivot = pivot.reindex(ORDERED_DAYS)
+    heatmap_fig = px.imshow(
+        pivot,
+        labels=dict(x="Hour of Day", y="Day of Week", color="# Orders"),
+        aspect="auto",
+        color_continuous_scale='YlOrRd',
+        title="Order Frequency by Day of Week and Hour of Day"
+    )
+    heatmap_fig.update_layout(height=500)
+    
+    return bar_fig, pie_fig, heatmap_fig
 
 # Run the application
 if __name__ == '__main__':
