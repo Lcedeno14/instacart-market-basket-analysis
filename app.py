@@ -125,11 +125,10 @@ def update_graphs(selected_department, min_count):
     # Create top products bar chart
     product_counts = filtered_df['product_name'].value_counts()
     product_counts = product_counts[product_counts >= min_count]
-    
-    # Convert to DataFrame for proper plotting
+    top_10 = product_counts.head(10)
     bar_df = pd.DataFrame({
-        'product': product_counts.index,
-        'count': product_counts.values
+        'product': top_10.index,
+        'count': top_10.values
     })
     
     bar_fig = px.bar(
