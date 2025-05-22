@@ -17,24 +17,36 @@ server = app.server  # Expose server variable for Railway
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///instacart.db")
 engine = create_engine(DATABASE_URL)
 
+# Day of week mapping
+DAYS_OF_WEEK = [
+    "All Time", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+]
+DOW_MAP = {0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday"}
+REVERSE_DOW_MAP = {v: k for k, v in DOW_MAP.items()}
+
 # Function to load data from database
 def load_data():
     with engine.connect() as conn:
         # Load departments for dropdown
         departments_df = pd.read_sql_query("SELECT * FROM departments", conn)
         
-        # Load the merged data we need for visualizations
+        # Load the merged data we need for visualizations, including order_dow
         query = """
         SELECT 
             op.product_id,
             p.product_name,
             d.department,
-            d.department_id
+            d.department_id,
+            o.order_dow
         FROM order_products op
         JOIN products p ON op.product_id = p.product_id
         JOIN departments d ON p.department_id = d.department_id
+        JOIN orders o ON op.order_id = o.order_id
         """
         merged_df = pd.read_sql_query(query, conn)
+        
+        # Map order_dow to day name
+        merged_df['day_of_week'] = merged_df['order_dow'].map(DOW_MAP)
     
     return departments_df, merged_df
 
@@ -74,7 +86,18 @@ app.layout = html.Div([
                 value=10,
                 marks={i: str(i) for i in range(0, 101, 10)},
             )
-        ], style={'width': '60%', 'display': 'inline-block', 'margin': '10px'})
+        ], style={'width': '30%', 'display': 'inline-block', 'margin': '10px'}),
+        
+        # Day of Week Dropdown
+        html.Div([
+            html.Label('Day of Week:'),
+            dcc.Dropdown(
+                id='day-dropdown',
+                options=[{'label': day, 'value': day} for day in DAYS_OF_WEEK],
+                value='All Time',
+                style={'width': '100%'}
+            )
+        ], style={'width': '30%', 'display': 'inline-block', 'margin': '10px'})
     ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
     
     # Container for graphs
@@ -105,9 +128,10 @@ app.layout = html.Div([
      Output('department-distribution-chart', 'figure')],
     # Input components that will trigger the callback
     [Input('department-dropdown', 'value'),
-     Input('product-count-slider', 'value')]
+     Input('product-count-slider', 'value'),
+     Input('day-dropdown', 'value')]
 )
-def update_graphs(selected_department, min_count):
+def update_graphs(selected_department, min_count, selected_day):
     """
     This callback function updates both graphs when either the department dropdown
     or the product count slider changes.
@@ -115,12 +139,17 @@ def update_graphs(selected_department, min_count):
     Parameters:
     - selected_department: The department selected in the dropdown
     - min_count: The minimum product count from the slider
+    - selected_day: The selected day from the dropdown
     
     Returns:
     - Two Plotly figure objects for the bar chart and pie chart
     """
     # Filter data based on selected department
     filtered_df = merged_df[merged_df['department'] == selected_department]
+    
+    # Filter by day of week if not All Time
+    if selected_day != 'All Time':
+        filtered_df = filtered_df[filtered_df['day_of_week'] == selected_day]
     
     # Create top products bar chart
     product_counts = filtered_df['product_name'].value_counts()
@@ -135,7 +164,7 @@ def update_graphs(selected_department, min_count):
         bar_df,
         x='product',
         y='count',
-        title=f'Top Products in {selected_department}',
+        title=f'Top Products in {selected_department}' + (f' on {selected_day}' if selected_day != 'All Time' else ''),
         labels={'product': 'Product', 'count': 'Count'},
         template='plotly_white'
     )
