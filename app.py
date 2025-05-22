@@ -24,9 +24,7 @@ DAYS_OF_WEEK = [
 DOW_MAP = {0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday"}
 REVERSE_DOW_MAP = {v: k for k, v in DOW_MAP.items()}
 ORDERED_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
-# Hour labels for heatmap
-HOUR_LABELS = [f"{h % 12 or 12}{'am' if h < 12 else 'pm'}" for h in range(24)]
+HOUR_LABELS = [f"{h % 12 if h % 12 != 0 else 12}{'am' if h < 12 else 'pm'}" for h in range(24)]
 
 # Function to load data from database
 def load_data():
@@ -79,7 +77,7 @@ app.layout = html.Div([
                 # Get unique departments for the dropdown options
                 options=[{'label': dept, 'value': dept} 
                         for dept in departments_dropdown_df['department'].unique()],
-                value='All Departments',
+                value=departments_dropdown_df['department'].iloc[0],  # Default value
                 style={'width': '100%'}
             )
         ], style={'width': '30%', 'display': 'inline-block', 'margin': '10px'}),
@@ -125,7 +123,7 @@ app.layout = html.Div([
     # Heatmap of orders by day of week vs hour of day
     html.Div([
         dcc.Graph(id='orders-heatmap'),
-        html.Div(id='heatmap-stats', style={'marginTop': '20px', 'fontSize': '18px', 'textAlign': 'center'})
+        html.Div(id='heatmap-stats', style={'marginTop': '20px', 'fontSize': '18px'})
     ], style={'width': '100%', 'display': 'inline-block', 'marginTop': '40px'}),
     
     # Hidden div for storing intermediate data
@@ -183,14 +181,11 @@ def update_graphs(selected_department, min_count, selected_day):
         'count': top_10.values
     })
     
-    bar_title = (f'Top Products in {selected_department}' if selected_department != 'All Departments' else 'Top Products (All Departments)')
-    if selected_day != 'All Time':
-        bar_title += f' on {selected_day}'
     bar_fig = px.bar(
         bar_df,
         x='product',
         y='count',
-        title=bar_title,
+        title=f'Top Products in {selected_department}' + (f' on {selected_day}' if selected_day != 'All Time' else ''),
         labels={'product': 'Product', 'count': 'Count'},
         template='plotly_white'
     )
@@ -202,13 +197,10 @@ def update_graphs(selected_department, min_count, selected_day):
     
     # Create department distribution pie chart (filtered by day)
     dept_dist = pie_df['department'].value_counts()
-    pie_title = 'Distribution of Orders Across Departments'
-    if selected_day != 'All Time':
-        pie_title += f' on {selected_day}'
     pie_fig = px.pie(
         values=dept_dist.values,
         names=dept_dist.index,
-        title=pie_title,
+        title='Distribution of Orders Across Departments' + (f' on {selected_day}' if selected_day != 'All Time' else ''),
         template='plotly_white'
     )
     pie_fig.update_layout(height=500)
@@ -227,7 +219,8 @@ def update_graphs(selected_department, min_count, selected_day):
     )
     # Reorder days for display
     pivot = pivot.reindex(ORDERED_DAYS)
-    pivot.columns = HOUR_LABELS  # Relabel columns to times
+    # Relabel columns to hour labels
+    pivot.columns = [HOUR_LABELS[h] for h in pivot.columns]
     heatmap_fig = px.imshow(
         pivot,
         labels=dict(x="Hour of Day", y="Day of Week", color="# Orders"),
@@ -239,19 +232,15 @@ def update_graphs(selected_department, min_count, selected_day):
     
     # Statistical summaries for the heatmap
     values = pivot.values.flatten()
-    mode_idx = np.unravel_index(np.argmax(values), values.shape)
-    mode_day = pivot.index[mode_idx[0]]
-    mode_hour = pivot.columns[mode_idx[1]]
-    mode_count = values[mode_idx]
-    mean_count = np.mean(values)
-    median_count = np.median(values)
-    std_count = np.std(values)
+    mean = np.mean(values)
+    median = np.median(values)
+    std = np.std(values)
+    max_val = np.max(values)
+    min_val = np.min(values)
+    mode_val = pd.Series(values).mode().iloc[0] if len(pd.Series(values).mode()) > 0 else None
     stats_text = (
         f"<b>Heatmap Statistical Summary:</b> "
-        f"<br>Peak: <b>{mode_day} at {mode_hour}</b> with <b>{mode_count:,}</b> orders"
-        f"<br>Mean: <b>{mean_count:.2f}</b> orders/cell"
-        f"<br>Median: <b>{median_count:.2f}</b> orders/cell"
-        f"<br>Std Dev: <b>{std_count:.2f}</b> orders/cell"
+        f"Mean: {mean:.2f} | Median: {median:.2f} | Mode: {mode_val} | Std: {std:.2f} | Max: {max_val} | Min: {min_val}"
     )
     
     return bar_fig, pie_fig, heatmap_fig, stats_text
