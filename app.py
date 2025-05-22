@@ -122,8 +122,7 @@ app.layout = html.Div([
     
     # Heatmap of orders by day of week vs hour of day
     html.Div([
-        dcc.Graph(id='orders-heatmap'),
-        html.Div(id='heatmap-stats', style={'marginTop': '20px', 'fontSize': '18px'})
+        dcc.Graph(id='orders-heatmap')
     ], style={'width': '100%', 'display': 'inline-block', 'marginTop': '40px'}),
     
     # Hidden div for storing intermediate data
@@ -139,8 +138,7 @@ app.layout = html.Div([
     # Output components that will be updated
     [Output('top-products-chart', 'figure'),
      Output('department-distribution-chart', 'figure'),
-     Output('orders-heatmap', 'figure'),
-     Output('heatmap-stats', 'children')],
+     Output('orders-heatmap', 'figure')],
     # Input components that will trigger the callback
     [Input('department-dropdown', 'value'),
      Input('product-count-slider', 'value'),
@@ -230,20 +228,7 @@ def update_graphs(selected_department, min_count, selected_day):
     )
     heatmap_fig.update_layout(height=500)
     
-    # Statistical summaries for the heatmap
-    values = pivot.values.flatten()
-    mean = np.mean(values)
-    median = np.median(values)
-    std = np.std(values)
-    max_val = np.max(values)
-    min_val = np.min(values)
-    mode_val = pd.Series(values).mode().iloc[0] if len(pd.Series(values).mode()) > 0 else None
-    stats_text = (
-        f"<b>Heatmap Statistical Summary:</b> "
-        f"Mean: {mean:.2f} | Median: {median:.2f} | Mode: {mode_val} | Std: {std:.2f} | Max: {max_val} | Min: {min_val}"
-    )
-    
-    return bar_fig, pie_fig, heatmap_fig, stats_text
+    return bar_fig, pie_fig, heatmap_fig
 
 # Run the application
 if __name__ == '__main__':
