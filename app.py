@@ -26,6 +26,8 @@ from customer_segmentation import (
     analyze_purchase_patterns,
     create_segmentation_visualization
 )
+from src.analysis.data_storytelling import DataStorytelling
+import plotly.graph_objects as go
 
 # Set up logging
 logging.basicConfig(
@@ -78,7 +80,11 @@ def load_data():
                 o.order_id,
                 o.user_id,
                 o.order_number,
-                o.days_since_prior_order
+                o.days_since_prior_order,
+                CASE 
+                    WHEN op.reordered IS NOT NULL THEN op.reordered 
+                    ELSE 0 
+                END as reordered
             FROM order_products op
             JOIN products p ON op.product_id = p.product_id
             JOIN departments d ON p.department_id = d.department_id
@@ -100,10 +106,36 @@ def load_data():
 # Load data with error handling
 try:
     departments_df, merged_df = load_data()
+    
+    # Split merged_df into orders and order_products
+    orders_df = merged_df[['order_id', 'user_id', 'order_number', 'order_dow', 
+                          'order_hour_of_day', 'days_since_prior_order']].drop_duplicates()
+    
+    # Get order_products dataframe, handling missing reordered column
+    order_products_columns = ['order_id', 'product_id']
+    if 'reordered' in merged_df.columns:
+        order_products_columns.append('reordered')
+    order_products_df = merged_df[order_products_columns].drop_duplicates()
+    
+    # Get products dataframe
+    products_df = merged_df[['product_id', 'product_name', 'department_id']].drop_duplicates()
+    
+    # Initialize data storyteller with the correct dataframes
+    storyteller = DataStorytelling(
+        orders_df=orders_df,
+        products_df=products_df,
+        departments_df=departments_df,
+        order_products_df=order_products_df
+    )
+    
 except Exception as e:
     logger.error(f"Failed to load initial data: {str(e)}")
     departments_df = pd.DataFrame(columns=['department'])
     merged_df = pd.DataFrame()
+    orders_df = pd.DataFrame()
+    products_df = pd.DataFrame()
+    order_products_df = pd.DataFrame()
+    storyteller = None
 
 # Add 'All Departments' option to dropdown
 all_departments_option = pd.DataFrame({'department': ['All Departments']})
@@ -111,11 +143,9 @@ departments_dropdown_df = pd.concat([all_departments_option, departments_df], ig
 
 # Define the layout of the application
 app.layout = html.Div([
-    # Header
-    html.H1('Instacart Market Basket Analysis Dashboard',
-            style={'textAlign': 'center', 'color': '#2c3e50', 'margin': '20px'}),
+    html.H1('Instacart Market Basket Analysis Dashboard', 
+            style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '30px'}),
     
-    # Tabs for different analyses
     dcc.Tabs([
         # Basic Analysis Tab
         dcc.Tab(label='Basic Analysis', children=[
@@ -216,7 +246,7 @@ app.layout = html.Div([
                 
                 # Market Basket Analysis Results
                 html.Div([
-                    dcc.Graph(id='association-rules-graph')
+                    dcc.Graph(id='association-rules-graph-main')
                 ], style={'width': '100%', 'marginTop': '20px'})
             ])
         ]),
@@ -253,7 +283,107 @@ app.layout = html.Div([
                     dcc.Graph(id='segmentation-graph')
                 ], style={'width': '100%', 'marginTop': '20px'})
             ])
-        ])
+        ]),
+        
+        # Price Analysis Tab (only show if storyteller is initialized)
+        dcc.Tab(label='Price Analysis', children=[
+            html.Div([
+                html.Div([
+                    html.H2('Price Analysis and Customer Spending Patterns', 
+                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
+                    dcc.Graph(figure=storyteller.create_story_visualization('price_analysis') if storyteller else go.Figure()),
+                    html.Div([
+                        html.Div([
+                            html.H3(section['title'], 
+                                   style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                            html.Ul([
+                                html.Li(insight, style={'marginBottom': '5px'})
+                                for insight in section['insights']
+                            ])
+                        ], style={'marginBottom': '20px'})
+                        for section in (storyteller.generate_price_insights_story()['sections'] if storyteller else [])
+                    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
+                    
+                    html.Div([
+                        html.H3('Recommendations', 
+                               style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                        html.Ul([
+                            html.Li(rec, style={'marginBottom': '5px'})
+                            for rec in (storyteller.generate_price_insights_story().get('recommendations', []) if storyteller else [])
+                        ])
+                    ], style={'padding': '20px', 'backgroundColor': '#e8f4f8', 'borderRadius': '5px', 'marginTop': '20px'})
+                ]) if storyteller else html.Div("Price analysis is not available. Please check the logs for details.")
+            ], style={'padding': '20px'})
+        ]),
+        
+        # Data Stories Tab (only show if storyteller is initialized)
+        dcc.Tab(label='Data Stories', children=[
+            html.Div([
+                html.Div([
+                    html.H2('Customer Journey Insights', 
+                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
+                    dcc.Graph(figure=storyteller.create_story_visualization('customer_journey') if storyteller else go.Figure()),
+                    html.Div([
+                        html.Div([
+                            html.H3(section['title'], 
+                                   style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                            html.Ul([
+                                html.Li(insight, style={'marginBottom': '5px'})
+                                for insight in section['insights']
+                            ])
+                        ], style={'marginBottom': '20px'})
+                        for section in (storyteller.generate_customer_journey_story()['sections'] if storyteller else [])
+                    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'})
+                ], style={'marginBottom': '40px'}) if storyteller else html.Div("Customer journey analysis is not available. Please check the logs for details."),
+                
+                html.Div([
+                    html.H2('Seasonal Trends Analysis', 
+                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
+                    dcc.Graph(figure=storyteller.create_story_visualization('seasonal_trends') if storyteller else go.Figure()),
+                    html.Div([
+                        html.Div([
+                            html.H3(section['title'], 
+                                   style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                            html.Ul([
+                                html.Li(insight, style={'marginBottom': '5px'})
+                                for insight in section['insights']
+                            ])
+                        ], style={'marginBottom': '20px'})
+                        for section in (storyteller.generate_seasonal_trends_story()['sections'] if storyteller else [])
+                    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'})
+                ], style={'marginBottom': '40px'}),
+                
+                html.Div([
+                    html.H2('Product Association Insights', 
+                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
+                    html.Div([
+                        dcc.Input(
+                            id='min-support',
+                            type='number',
+                            value=0.01,
+                            min=0.001,
+                            max=0.1,
+                            step=0.001,
+                            style={'width': '150px', 'marginRight': '10px'}
+                        ),
+                        dcc.Input(
+                            id='min-confidence',
+                            type='number',
+                            value=0.1,
+                            min=0.01,
+                            max=0.5,
+                            step=0.01,
+                            style={'width': '150px'}
+                        ),
+                        html.Label('Min Support', style={'marginRight': '20px'}),
+                        html.Label('Min Confidence')
+                    ], style={'marginBottom': '20px', 'textAlign': 'center'}),
+                    dcc.Graph(id='association-rules-graph-detail'),
+                    html.Div(id='association-insights', 
+                            style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'})
+                ])
+            ], style={'padding': '20px'})
+        ]) if storyteller else None
     ]),
     
     # Hidden div for storing intermediate data
@@ -374,7 +504,7 @@ def update_graphs(selected_department, min_count, selected_day):
 
 # Add new callback for market basket analysis
 @app.callback(
-    Output('association-rules-graph', 'figure'),
+    Output('association-rules-graph-main', 'figure'),
     [Input('support-slider', 'value'),
      Input('confidence-slider', 'value')]
 )
@@ -492,6 +622,31 @@ def update_segmentation(n_clusters, segmentation_type):
             height=600,
             template='plotly_white'
         )
+
+@app.callback(
+    [Output('association-rules-graph-detail', 'figure'),
+     Output('association-insights', 'children')],
+    [Input('min-support', 'value'),
+     Input('min-confidence', 'value')]
+)
+def update_association_rules(min_support, min_confidence):
+    """Update association rules visualization and insights based on thresholds."""
+    story = storyteller.generate_product_association_story(min_support, min_confidence)
+    fig = storyteller.create_story_visualization('product_associations')
+    
+    insights = html.Div([
+        html.Div([
+            html.H3(section['title'], 
+                   style={'color': '#2c3e50', 'marginBottom': '10px'}),
+            html.Ul([
+                html.Li(insight, style={'marginBottom': '5px'})
+                for insight in section['insights']
+            ])
+        ], style={'marginBottom': '20px'})
+        for section in story['sections']
+    ])
+    
+    return fig, insights
 
 # Add health check endpoint
 @server.route('/health')
