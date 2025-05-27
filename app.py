@@ -294,7 +294,7 @@ def update_graphs(selected_department, min_count, selected_day):
     if selected_department == 'All Departments':
         filtered_df = merged_df.copy()
     else:
-    filtered_df = merged_df[merged_df['department'] == selected_department]
+        filtered_df = merged_df[merged_df['department'] == selected_department]
     
     # Filter by day of week if not All Time
     if selected_day != 'All Time':
