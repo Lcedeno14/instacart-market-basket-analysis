@@ -67,7 +67,7 @@ def load_data():
                 o.order_number,
                 o.days_since_prior_order
             FROM order_products op
-            JOIN products p ON op.product_id = p.product_id
+            JOIN products_with_price p ON op.product_id = p.product_id
             JOIN departments d ON p.department_id = d.department_id
             JOIN orders o ON op.order_id = o.order_id
             """
@@ -413,7 +413,7 @@ def update_market_basket(support, confidence, analysis_type):
     else:  # price-weighted analysis
         # Get product associations with prices
         basket = merged_df.merge(
-            pd.read_sql_query("SELECT product_id, price FROM products", engine),
+            pd.read_sql_query("SELECT product_id, price FROM products_with_price", engine),
             on='product_id'
         ).groupby(['order_id', 'product_name'])['price'].mean().unstack().fillna(0)
         basket = (basket > 0).astype(int)
