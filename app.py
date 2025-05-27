@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 # Import necessary libraries
 import dash
 from dash import dcc, html
@@ -15,6 +18,7 @@ from sklearn.cluster import KMeans
 from datetime import datetime, timedelta
 from data_quality import check_data_quality
 from flask import jsonify
+import json
 
 # Set up logging
 logging.basicConfig(
@@ -29,7 +33,9 @@ app = dash.Dash(__name__)
 server = app.server  # Expose server variable for Railway
 
 # Use DATABASE_URL from environment (set by Railway)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///instacart.db")
+if "DATABASE_URL" not in os.environ:
+    raise RuntimeError("DATABASE_URL environment variable must be set for PostgreSQL connection.")
+DATABASE_URL = os.environ["DATABASE_URL"]
 engine = create_engine(DATABASE_URL)
 
 # Perform data quality checks before starting
@@ -173,29 +179,31 @@ app.layout = html.Div([
                     dcc.Slider(
                         id='support-slider',
                         min=0.001,
-                        max=0.1,
+                        max=0.02,
                         step=0.001,
-                        value=0.005,
-                        marks={i/100: f'{i}%' for i in range(1, 11)},
+                        value=0.001,
+                        marks={
+                            0.001: '0.1%',
+                            0.002: '0.2%',
+                            0.005: '0.5%',
+                            0.01: '1%',
+                            0.02: '2%'
+                        },
                     ),
                     html.Label('Minimum Confidence:'),
                     dcc.Slider(
                         id='confidence-slider',
                         min=0.1,
-                        max=1.0,
-                        step=0.05,
-                        value=0.3,
-                        marks={i/10: f'{i*10}%' for i in range(1, 11)},
-                    ),
-                    html.Label('Analysis Type:'),
-                    dcc.RadioItems(
-                        id='analysis-type',
-                        options=[
-                            {'label': 'Product Associations', 'value': 'product'},
-                            {'label': 'Department Associations', 'value': 'department'}
-                        ],
-                        value='product',
-                        labelStyle={'display': 'inline-block', 'margin': '10px'}
+                        max=0.5,
+                        step=0.1,
+                        value=0.1,
+                        marks={
+                            0.1: '10%',
+                            0.2: '20%',
+                            0.3: '30%',
+                            0.4: '40%',
+                            0.5: '50%'
+                        },
                     )
                 ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
                 
@@ -361,53 +369,55 @@ def update_graphs(selected_department, min_count, selected_day):
 @app.callback(
     Output('association-rules-graph', 'figure'),
     [Input('support-slider', 'value'),
-     Input('confidence-slider', 'value'),
-     Input('analysis-type', 'value')]
+     Input('confidence-slider', 'value')]
 )
 @safe_callback
-def update_market_basket(support, confidence, analysis_type):
+def update_market_basket(support, confidence):
     """
     Update market basket analysis visualization based on selected parameters
     """
-    if analysis_type == 'product':
-        # Get product associations
-        basket = merged_df.groupby(['order_id', 'product_name'])['product_id'].count().unstack().fillna(0)
-        basket = (basket > 0).astype(int)
-        
-        # Generate frequent itemsets
-        frequent_itemsets = apriori(basket, min_support=support, use_colnames=True)
-        rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=confidence)
-        
-        # Create visualization
-        fig = px.scatter(
-            rules,
-            x='support',
-            y='confidence',
-            size='lift',
-            hover_data=['antecedents', 'consequents'],
-            title='Product Association Rules'
+    # Get rules from database that match the selected parameters
+    with engine.connect() as conn:
+        rules_df = pd.read_sql_query("""
+            SELECT 
+                algorithm,
+                support,
+                confidence,
+                lift,
+                antecedents,
+                consequents,
+                support_param,
+                confidence_param
+            FROM market_basket_rules
+            WHERE support_param = %s
+            AND confidence_param = %s
+            ORDER BY lift DESC
+        """, conn, params=(support, confidence))
+    
+    if rules_df.empty:
+        # Return empty figure if no rules found
+        return px.scatter(
+            title='No rules found for selected parameters. Try adjusting support/confidence.'
+        ).update_layout(
+            height=600,
+            template='plotly_white',
+            xaxis_title='Support',
+            yaxis_title='Confidence'
         )
-        
-    elif analysis_type == 'department':
-        # Get department associations
-        dept_transactions = merged_df.groupby('order_id')['department'].apply(list)
-        te = TransactionEncoder()
-        te_ary = te.fit(dept_transactions).transform(dept_transactions)
-        dept_df = pd.DataFrame(te_ary, columns=te.columns_)
-        
-        # Generate frequent itemsets
-        frequent_itemsets = fpgrowth(dept_df, min_support=support, use_colnames=True)
-        rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=confidence)
-        
-        # Create visualization
-        fig = px.scatter(
-            rules,
-            x='support',
-            y='confidence',
-            size='lift',
-            hover_data=['antecedents', 'consequents'],
-            title='Department Association Rules'
-        )
+    
+    # Parse JSON strings back to lists
+    rules_df['antecedents'] = rules_df['antecedents'].apply(json.loads)
+    rules_df['consequents'] = rules_df['consequents'].apply(json.loads)
+    
+    # Create visualization
+    fig = px.scatter(
+        rules_df,
+        x='support',
+        y='confidence',
+        size='lift',
+        hover_data=['antecedents', 'consequents'],
+        title='Product Association Rules'
+    )
     
     fig.update_layout(
         height=600,
@@ -480,10 +490,19 @@ def update_segmentation(n_clusters, segmentation_type):
     if segmentation_type == 'rfm':
         # Calculate RFM metrics
         rfm_df = calculate_rfm(merged_df)
+        # Drop rows with NaNs before clustering
+        rfm_df = rfm_df.dropna()
         
+        if len(rfm_df) == 0:
+            return px.scatter(
+                title='No data available for RFM analysis. Please check your data.'
+            ).update_layout(
+                height=600,
+                template='plotly_white'
+            )
+            
         # Perform clustering
         rfm_clustered = perform_clustering(rfm_df, n_clusters)
-        
         # Create 3D scatter plot
         fig = px.scatter_3d(
             rfm_clustered,
@@ -498,20 +517,27 @@ def update_segmentation(n_clusters, segmentation_type):
                 'monetary': 'Monetary (total products purchased)'
             }
         )
-        
     elif segmentation_type == 'patterns':
         # Analyze purchase patterns by time of day and day of week
-        patterns = merged_df.groupby(['user_id', 'order_hour_of_day', 'day_of_week'])['product_id'].count().unstack().unstack()
+        # Limit to a sample of users to avoid huge DataFrames
+        user_sample = merged_df['user_id'].drop_duplicates().sample(n=min(500, merged_df['user_id'].nunique()), random_state=42)
+        patterns = merged_df[merged_df['user_id'].isin(user_sample)].groupby(['user_id', 'order_hour_of_day', 'day_of_week'])['product_id'].count().unstack().unstack()
         patterns = patterns.fillna(0)
         
+        if len(patterns) == 0:
+            return px.scatter(
+                title='No data available for pattern analysis. Please check your data.'
+            ).update_layout(
+                height=600,
+                template='plotly_white'
+            )
+            
         # Scale the data
         scaler = StandardScaler()
         patterns_scaled = scaler.fit_transform(patterns)
-        
         # Perform clustering
         kmeans = KMeans(n_clusters=n_clusters, random_state=42)
         patterns['cluster'] = kmeans.fit_predict(patterns_scaled)
-        
         # Create heatmap of average patterns by cluster
         cluster_patterns = patterns.groupby('cluster').mean()
         fig = px.imshow(
@@ -520,14 +546,22 @@ def update_segmentation(n_clusters, segmentation_type):
             labels=dict(x='Day of Week', y='Hour of Day', color='Average Orders'),
             aspect='auto'
         )
-        
     else:  # department preferences
         # Analyze department preferences
         dept_prefs = analyze_department_preferences(merged_df, n_clusters)
+        # Drop rows with NaNs before plotting
+        dept_prefs = dept_prefs.dropna()
         
+        if len(dept_prefs) == 0:
+            return px.scatter(
+                title='No data available for department preference analysis. Please check your data.'
+            ).update_layout(
+                height=600,
+                template='plotly_white'
+            )
+            
         # Create radar chart of average department preferences by cluster
         cluster_means = dept_prefs.groupby('cluster').mean()
-        
         # Create radar chart
         fig = px.line_polar(
             cluster_means,
@@ -536,7 +570,6 @@ def update_segmentation(n_clusters, segmentation_type):
             line_close=True,
             title='Department Preferences by Cluster'
         )
-        
         # Add other clusters
         for i in range(1, n_clusters):
             fig.add_trace(px.line_polar(
@@ -550,7 +583,6 @@ def update_segmentation(n_clusters, segmentation_type):
         height=600,
         template='plotly_white'
     )
-    
     return fig
 
 # Add health check endpoint
