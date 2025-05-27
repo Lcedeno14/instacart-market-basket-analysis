@@ -96,8 +96,6 @@ def get_products():
 def get_orders():
     """Get orders with optional filtering"""
     user_id = request.args.get('user_id', type=int)
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
     limit = request.args.get('limit', 100, type=int)
     
     query = """
@@ -120,19 +118,11 @@ def get_orders():
         where_clauses.append("o.user_id = :user_id")
         params['user_id'] = user_id
     
-    if start_date:
-        where_clauses.append("o.order_date >= :start_date")
-        params['start_date'] = start_date
-    
-    if end_date:
-        where_clauses.append("o.order_date <= :end_date")
-        params['end_date'] = end_date
-    
     if where_clauses:
         query += " WHERE " + " AND ".join(where_clauses)
     
     query += " GROUP BY o.order_id, o.user_id, o.order_number, o.order_dow, o.order_hour_of_day, o.days_since_prior_order"
-    query += " ORDER BY o.order_date DESC LIMIT :limit"
+    query += " ORDER BY o.order_id DESC LIMIT :limit"
     params['limit'] = limit
     
     with engine.connect() as conn:
@@ -149,9 +139,6 @@ def get_orders():
 @handle_errors
 def get_department_analytics():
     """Get department-level analytics"""
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
     query = """
     SELECT 
         d.department,
@@ -163,25 +150,10 @@ def get_department_analytics():
     JOIN order_products op ON p.product_id = op.product_id
     JOIN orders o ON op.order_id = o.order_id
     """
-    
-    params = {}
-    where_clauses = []
-    
-    if start_date:
-        where_clauses.append("o.order_date >= :start_date")
-        params['start_date'] = start_date
-    
-    if end_date:
-        where_clauses.append("o.order_date <= :end_date")
-        params['end_date'] = end_date
-    
-    if where_clauses:
-        query += " WHERE " + " AND ".join(where_clauses)
-    
     query += " GROUP BY d.department ORDER BY order_count DESC"
     
     with engine.connect() as conn:
-        result = conn.execute(text(query), params)
+        result = conn.execute(text(query))
         analytics = [dict(row) for row in result]
     
     return jsonify({
@@ -199,23 +171,19 @@ def get_customer_analytics(user_id):
         SELECT 
             o.user_id,
             o.order_id,
-            o.order_date,
             COUNT(op.product_id) as product_count,
             COUNT(DISTINCT p.department_id) as department_count
         FROM orders o
         JOIN order_products op ON o.order_id = op.order_id
         JOIN products p ON op.product_id = p.product_id
         WHERE o.user_id = :user_id
-        GROUP BY o.user_id, o.order_id, o.order_date
+        GROUP BY o.user_id, o.order_id
     )
     SELECT 
         user_id,
         COUNT(DISTINCT order_id) as total_orders,
         AVG(product_count) as avg_products_per_order,
-        AVG(department_count) as avg_departments_per_order,
-        MIN(order_date) as first_order_date,
-        MAX(order_date) as last_order_date,
-        JULIANDAY(MAX(order_date)) - JULIANDAY(MIN(order_date)) as days_active
+        AVG(department_count) as avg_departments_per_order
     FROM customer_orders
     GROUP BY user_id
     """

@@ -65,8 +65,7 @@ def load_data():
                 o.order_id,
                 o.user_id,
                 o.order_number,
-                o.days_since_prior_order,
-                o.order_date
+                o.days_since_prior_order
             FROM order_products op
             JOIN products p ON op.product_id = p.product_id
             JOIN departments d ON p.department_id = d.department_id
@@ -76,10 +75,6 @@ def load_data():
             
             # Map order_dow to day name
             merged_df['day_of_week'] = merged_df['order_dow'].map(DOW_MAP)
-            
-            # Convert order_date to datetime if it's not already
-            if 'order_date' in merged_df.columns:
-                merged_df['order_date'] = pd.to_datetime(merged_df['order_date'])
             
             logger.info("Data loaded successfully")
             return departments_df, merged_df
@@ -453,23 +448,15 @@ def calculate_rfm(df):
     """
     Calculate RFM metrics for each customer
     """
-    # Get the most recent date in the dataset
-    max_date = df['order_date'].max()
-    
-    # Calculate RFM metrics
+    # Calculate RFM metrics (recency will be set to NaN since order_date is not available)
     rfm = df.groupby('user_id').agg({
-        'order_date': lambda x: (max_date - x.max()).days,  # Recency
         'order_id': 'count',  # Frequency
         'product_id': 'count'  # Monetary (using product count as proxy)
     }).rename(columns={
-        'order_date': 'recency',
         'order_id': 'frequency',
         'product_id': 'monetary'
     })
-    
-    # Lower recency is better, so we'll invert it
-    rfm['recency'] = -rfm['recency']
-    
+    rfm['recency'] = np.nan  # No recency without order_date
     return rfm
 
 def perform_clustering(rfm_df, n_clusters):
