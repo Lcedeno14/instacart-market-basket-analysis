@@ -67,7 +67,7 @@ def load_data():
                 o.order_number,
                 o.days_since_prior_order
             FROM order_products op
-            JOIN products_with_price p ON op.product_id = p.product_id
+            JOIN products p ON op.product_id = p.product_id
             JOIN departments d ON p.department_id = d.department_id
             JOIN orders o ON op.order_id = o.order_id
             """
@@ -192,8 +192,7 @@ app.layout = html.Div([
                         id='analysis-type',
                         options=[
                             {'label': 'Product Associations', 'value': 'product'},
-                            {'label': 'Department Associations', 'value': 'department'},
-                            {'label': 'Price-Weighted Analysis', 'value': 'price'}
+                            {'label': 'Department Associations', 'value': 'department'}
                         ],
                         value='product',
                         labelStyle={'display': 'inline-block', 'margin': '10px'}
@@ -408,31 +407,6 @@ def update_market_basket(support, confidence, analysis_type):
             size='lift',
             hover_data=['antecedents', 'consequents'],
             title='Department Association Rules'
-        )
-        
-    else:  # price-weighted analysis
-        # Get product associations with prices
-        basket = merged_df.merge(
-            pd.read_sql_query("SELECT product_id, price FROM products_with_price", engine),
-            on='product_id'
-        ).groupby(['order_id', 'product_name'])['price'].mean().unstack().fillna(0)
-        basket = (basket > 0).astype(int)
-        
-        # Generate frequent itemsets
-        frequent_itemsets = apriori(basket, min_support=support, use_colnames=True)
-        rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=confidence)
-        
-        # Calculate weighted lift
-        rules['weighted_lift'] = rules['lift'] * rules['support']
-        
-        # Create visualization
-        fig = px.scatter(
-            rules,
-            x='support',
-            y='confidence',
-            size='weighted_lift',
-            hover_data=['antecedents', 'consequents', 'weighted_lift'],
-            title='Price-Weighted Association Rules'
         )
     
     fig.update_layout(
