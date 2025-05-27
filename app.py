@@ -19,6 +19,13 @@ from datetime import datetime, timedelta
 from data_quality import check_data_quality
 from flask import jsonify
 import json
+from customer_segmentation import (
+    calculate_rfm,
+    perform_clustering,
+    analyze_department_preferences,
+    analyze_purchase_patterns,
+    create_segmentation_visualization
+)
 
 # Set up logging
 logging.basicConfig(
@@ -428,55 +435,6 @@ def update_market_basket(support, confidence):
     
     return fig
 
-def calculate_rfm(df):
-    """
-    Calculate RFM metrics for each customer
-    """
-    # Calculate RFM metrics (recency will be set to NaN since order_date is not available)
-    rfm = df.groupby('user_id').agg({
-        'order_id': 'count',  # Frequency
-        'product_id': 'count'  # Monetary (using product count as proxy)
-    }).rename(columns={
-        'order_id': 'frequency',
-        'product_id': 'monetary'
-    })
-    rfm['recency'] = np.nan  # No recency without order_date
-    return rfm
-
-def perform_clustering(rfm_df, n_clusters):
-    """
-    Perform K-means clustering on RFM data
-    """
-    # Scale the data
-    scaler = StandardScaler()
-    rfm_scaled = scaler.fit_transform(rfm_df)
-    
-    # Perform clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    rfm_df['cluster'] = kmeans.fit_predict(rfm_scaled)
-    
-    return rfm_df
-
-def analyze_department_preferences(df, n_clusters):
-    """
-    Analyze customer department preferences and cluster customers
-    """
-    # Calculate department preferences for each customer
-    dept_prefs = df.groupby(['user_id', 'department'])['product_id'].count().unstack(fill_value=0)
-    
-    # Normalize by total purchases
-    dept_prefs = dept_prefs.div(dept_prefs.sum(axis=1), axis=0)
-    
-    # Scale the data
-    scaler = StandardScaler()
-    dept_scaled = scaler.fit_transform(dept_prefs)
-    
-    # Perform clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    dept_prefs['cluster'] = kmeans.fit_predict(dept_scaled)
-    
-    return dept_prefs
-
 @app.callback(
     Output('segmentation-graph', 'figure'),
     [Input('cluster-slider', 'value'),
@@ -487,103 +445,53 @@ def update_segmentation(n_clusters, segmentation_type):
     """
     Update customer segmentation visualization based on selected parameters
     """
-    if segmentation_type == 'rfm':
-        # Calculate RFM metrics
-        rfm_df = calculate_rfm(merged_df)
-        # Drop rows with NaNs before clustering
-        rfm_df = rfm_df.dropna()
-        
-        if len(rfm_df) == 0:
-            return px.scatter(
-                title='No data available for RFM analysis. Please check your data.'
-            ).update_layout(
-                height=600,
-                template='plotly_white'
-            )
+    try:
+        if segmentation_type == 'rfm':
+            # Calculate RFM metrics
+            rfm_df = calculate_rfm(merged_df)
+            # Perform clustering
+            rfm_clustered = perform_clustering(rfm_df, n_clusters)
+            if len(rfm_clustered) == 0:
+                return px.scatter(
+                    title='No data available for RFM analysis. Please check your data.'
+                ).update_layout(
+                    height=600,
+                    template='plotly_white'
+                )
+            return create_segmentation_visualization(rfm_clustered, 'rfm', n_clusters)
             
-        # Perform clustering
-        rfm_clustered = perform_clustering(rfm_df, n_clusters)
-        # Create 3D scatter plot
-        fig = px.scatter_3d(
-            rfm_clustered,
-            x='recency',
-            y='frequency',
-            z='monetary',
-            color='cluster',
-            title='Customer Segments (RFM Analysis)',
-            labels={
-                'recency': 'Recency (days since last order)',
-                'frequency': 'Frequency (number of orders)',
-                'monetary': 'Monetary (total products purchased)'
-            }
-        )
-    elif segmentation_type == 'patterns':
-        # Analyze purchase patterns by time of day and day of week
-        # Limit to a sample of users to avoid huge DataFrames
-        user_sample = merged_df['user_id'].drop_duplicates().sample(n=min(500, merged_df['user_id'].nunique()), random_state=42)
-        patterns = merged_df[merged_df['user_id'].isin(user_sample)].groupby(['user_id', 'order_hour_of_day', 'day_of_week'])['product_id'].count().unstack().unstack()
-        patterns = patterns.fillna(0)
-        
-        if len(patterns) == 0:
-            return px.scatter(
-                title='No data available for pattern analysis. Please check your data.'
-            ).update_layout(
-                height=600,
-                template='plotly_white'
-            )
+        elif segmentation_type == 'patterns':
+            # Analyze purchase patterns
+            patterns = analyze_purchase_patterns(merged_df, n_clusters)
+            if len(patterns) == 0:
+                return px.scatter(
+                    title='No data available for pattern analysis. Please check your data.'
+                ).update_layout(
+                    height=600,
+                    template='plotly_white'
+                )
+            return create_segmentation_visualization(patterns, 'patterns', n_clusters)
             
-        # Scale the data
-        scaler = StandardScaler()
-        patterns_scaled = scaler.fit_transform(patterns)
-        # Perform clustering
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-        patterns['cluster'] = kmeans.fit_predict(patterns_scaled)
-        # Create heatmap of average patterns by cluster
-        cluster_patterns = patterns.groupby('cluster').mean()
-        fig = px.imshow(
-            cluster_patterns,
-            title='Purchase Patterns by Cluster',
-            labels=dict(x='Day of Week', y='Hour of Day', color='Average Orders'),
-            aspect='auto'
-        )
-    else:  # department preferences
-        # Analyze department preferences
-        dept_prefs = analyze_department_preferences(merged_df, n_clusters)
-        # Drop rows with NaNs before plotting
-        dept_prefs = dept_prefs.dropna()
-        
-        if len(dept_prefs) == 0:
-            return px.scatter(
-                title='No data available for department preference analysis. Please check your data.'
-            ).update_layout(
-                height=600,
-                template='plotly_white'
-            )
+        else:  # department preferences
+            # Analyze department preferences
+            dept_prefs = analyze_department_preferences(merged_df, n_clusters)
+            if len(dept_prefs) == 0:
+                return px.scatter(
+                    title='No data available for department preference analysis. Please check your data.'
+                ).update_layout(
+                    height=600,
+                    template='plotly_white'
+                )
+            return create_segmentation_visualization(dept_prefs, 'departments', n_clusters)
             
-        # Create radar chart of average department preferences by cluster
-        cluster_means = dept_prefs.groupby('cluster').mean()
-        # Create radar chart
-        fig = px.line_polar(
-            cluster_means,
-            r=cluster_means.values[0],  # First cluster
-            theta=cluster_means.columns[:-1],  # Exclude cluster column
-            line_close=True,
-            title='Department Preferences by Cluster'
+    except Exception as e:
+        logger.error(f"Error in segmentation analysis: {str(e)}")
+        return px.scatter(
+            title=f'Error in segmentation analysis: {str(e)}'
+        ).update_layout(
+            height=600,
+            template='plotly_white'
         )
-        # Add other clusters
-        for i in range(1, n_clusters):
-            fig.add_trace(px.line_polar(
-                cluster_means,
-                r=cluster_means.values[i],
-                theta=cluster_means.columns[:-1],
-                line_close=True
-            ).data[0])
-    
-    fig.update_layout(
-        height=600,
-        template='plotly_white'
-    )
-    return fig
 
 # Add health check endpoint
 @server.route('/health')

@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
@@ -179,8 +181,10 @@ class ETLPipeline:
 
 if __name__ == "__main__":
     # Example usage
+    if "DATABASE_URL" not in os.environ:
+        raise RuntimeError("DATABASE_URL environment variable must be set for PostgreSQL connection.")
     pipeline = ETLPipeline(
         source_path='data',
-        db_url=os.getenv('DATABASE_URL', 'sqlite:///instacart.db')
+        db_url=os.environ['DATABASE_URL']
     )
     pipeline.run_pipeline() 

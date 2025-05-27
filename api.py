@@ -57,7 +57,7 @@ def get_products():
         p.product_name,
         d.department,
         COUNT(op.order_id) as order_count
-    FROM products_with_price p
+    FROM products p
     JOIN departments d ON p.department_id = d.department_id
     LEFT JOIN order_products op ON p.product_id = op.product_id
     """
@@ -146,7 +146,7 @@ def get_department_analytics():
         COUNT(op.product_id) as product_count,
         COUNT(DISTINCT o.user_id) as unique_customers
     FROM departments d
-    JOIN products_with_price p ON d.department_id = p.department_id
+    JOIN products p ON d.department_id = p.department_id
     JOIN order_products op ON p.product_id = op.product_id
     JOIN orders o ON op.order_id = o.order_id
     """
@@ -175,7 +175,7 @@ def get_customer_analytics(user_id):
             COUNT(DISTINCT p.department_id) as department_count
         FROM orders o
         JOIN order_products op ON o.order_id = op.order_id
-        JOIN products_with_price p ON op.product_id = p.product_id
+        JOIN products p ON op.product_id = p.product_id
         WHERE o.user_id = :user_id
         GROUP BY o.user_id, o.order_id
     )
