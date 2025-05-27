@@ -38,6 +38,17 @@ ENV/
 *.swp
 *.swo
 
+# Database
+*.db
+*.sqlite3
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+
 # OS
 .DS_Store
 .DS_Store?

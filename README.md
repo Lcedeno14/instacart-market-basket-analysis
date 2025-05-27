@@ -1,27 +1,46 @@
 # Instacart Market Basket Analysis Dashboard
 
-An interactive dashboard built with Dash and Plotly to analyze Instacart market basket data. The dashboard provides insights into product popularity and department distribution across orders.
+A comprehensive data analysis and visualization dashboard for Instacart order data, featuring market basket analysis, customer segmentation, and interactive visualizations.
 
 ## Features
 
-- Interactive department selection
-- Product count filtering
-- Top products visualization by department
+### Basic Analysis
+- Interactive filtering by department and day of week
+- Top products visualization
 - Department distribution analysis
-- SQLite database backend for efficient data management
+- Order frequency heatmap by day and hour
+
+### Market Basket Analysis
+- Product association rules using Apriori algorithm
+- Department-level associations using FP-Growth
+- Price-weighted analysis for high-value product combinations
+- Adjustable support and confidence thresholds
+
+### Customer Segmentation
+- RFM (Recency, Frequency, Monetary) analysis
+- Purchase pattern clustering
+- Department preference analysis
+- Interactive cluster visualization
+
+## Technical Stack
+- **Frontend**: Dash/Plotly for interactive visualizations
+- **Backend**: Python with SQLAlchemy for database operations
+- **Data Analysis**: Pandas, NumPy, scikit-learn
+- **Market Basket Analysis**: mlxtend
+- **Database**: PostgreSQL (production) / SQLite (development)
 
 ## Setup Instructions
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/YOUR_USERNAME/instacart-market-basket-analysis.git
+git clone https://github.com/yourusername/instacart-market-basket-analysis.git
 cd instacart-market-basket-analysis
 ```
 
 2. Create and activate a virtual environment:
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows, use: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 3. Install dependencies:
@@ -29,45 +48,43 @@ source venv/bin/activate  # On Windows, use: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Download the dataset:
-   - Download the Instacart Market Basket Analysis dataset from [Kaggle](https://www.kaggle.com/c/instacart-market-basket-analysis/data)
-   - Place the following CSV files in the project root:
-     - `products.csv`
-     - `departments.csv`
-     - `orders.csv`
-     - `order_products__train.csv`
-
-5. Create the database:
+4. Set up the database:
+   - For development, the app will use SQLite by default
+   - For production, set the DATABASE_URL environment variable:
 ```bash
-python create_db.py
+export DATABASE_URL="postgresql://user:password@localhost:5432/instacart"
 ```
 
-6. Run the application:
+5. Run the application:
 ```bash
 python app.py
 ```
 
-The dashboard will be available at `http://localhost:8050`
+The dashboard will be available at http://localhost:8050
 
-## Project Structure
+## Data Engineering Features
+- Efficient data loading and caching
+- Optimized SQL queries for large datasets
+- Data quality checks and validation
+- Scalable database design
+- Production-ready deployment configuration
 
-- `app.py`: Main Dash application
-- `create_db.py`: Database creation and data import script
-- `requirements.txt`: Python dependencies
-- `instacart.db`: SQLite database (created after running create_db.py)
+## Data Analysis Features
+- Market basket analysis with multiple algorithms
+- Customer segmentation using RFM and clustering
+- Time-based pattern analysis
+- Department-level insights
+- Price-weighted analysis
 
-## Dependencies
-
-- dash
-- plotly
-- pandas
-- numpy
-- sqlite3
-
-## License
-
-MIT License
+## Future Enhancements
+- Real-time data updates
+- Automated model retraining
+- Additional segmentation methods
+- Export functionality for analysis results
+- API endpoints for data access
 
 ## Contributing
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-Feel free to submit issues and enhancement requests! 
+## License
+This project is licensed under the MIT License - see the LICENSE file for details. 
