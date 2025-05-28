@@ -41,6 +41,8 @@ ENV/
 # Database
 *.db
 *.sqlite3
+*.db-*
+cache/
 
 # Environment variables
 .env
@@ -56,4 +58,15 @@ ENV/
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db 
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Project archives
+*.zip
+DataMiningFinalProject/
+
+# Java
+*.jar 

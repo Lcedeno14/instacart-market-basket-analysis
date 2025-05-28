@@ -28,6 +28,8 @@ from customer_segmentation import (
 )
 from src.analysis.data_storytelling import DataStorytelling
 import plotly.graph_objects as go
+from src.analysis.metrics import BusinessMetrics
+from src.visualization.kpi_dashboard import KPIDashboard
 
 # Set up logging
 logging.basicConfig(
@@ -140,6 +142,10 @@ except Exception as e:
 # Add 'All Departments' option to dropdown
 all_departments_option = pd.DataFrame({'department': ['All Departments']})
 departments_dropdown_df = pd.concat([all_departments_option, departments_df], ignore_index=True)
+
+# Initialize metrics
+metrics = BusinessMetrics(merged_df)
+kpi_dashboard = KPIDashboard(metrics)
 
 # Define the layout of the application
 app.layout = html.Div([
@@ -383,7 +389,12 @@ app.layout = html.Div([
                             style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'})
                 ])
             ], style={'padding': '20px'})
-        ]) if storyteller else None
+        ]) if storyteller else None,
+        
+        # KPI Dashboard Tab
+        dcc.Tab(label='Business KPIs', children=[
+            kpi_dashboard.create_dashboard_layout()
+        ])
     ]),
     
     # Hidden div for storing intermediate data
