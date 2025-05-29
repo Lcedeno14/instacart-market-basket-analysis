@@ -27,16 +27,26 @@ from customer_segmentation import (
     create_segmentation_visualization
 )
 from src.analysis.data_storytelling import DataStorytelling
+from src.analysis.price_analysis import PriceAnalysis
 import plotly.graph_objects as go
 from src.analysis.metrics import BusinessMetrics
 from src.visualization.kpi_dashboard import KPIDashboard
+import time
 
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # This ensures logs go to console
+        logging.FileHandler('app.log')  # This will also save logs to a file
+    ]
 )
 logger = logging.getLogger(__name__)
+
+# Set specific logger levels for our modules
+logging.getLogger('src.analysis.price_analysis').setLevel(logging.INFO)
+logging.getLogger('src.analysis.data_storytelling').setLevel(logging.INFO)
 
 # Initialize the Dash application
 # This creates a Flask server under the hood
@@ -105,7 +115,7 @@ def load_data():
         # Return empty DataFrames with the correct structure
         return pd.DataFrame(columns=['department']), pd.DataFrame()
 
-# Load data with error handling
+# Initialize data storyteller and price analyzer with the correct dataframes
 try:
     departments_df, merged_df = load_data()
     
@@ -122,8 +132,15 @@ try:
     # Get products dataframe
     products_df = merged_df[['product_id', 'product_name', 'department_id']].drop_duplicates()
     
-    # Initialize data storyteller with the correct dataframes
+    # Initialize data storyteller and price analyzer
     storyteller = DataStorytelling(
+        orders_df=orders_df,
+        products_df=products_df,
+        departments_df=departments_df,
+        order_products_df=order_products_df
+    )
+    
+    price_analyzer = PriceAnalysis(
         orders_df=orders_df,
         products_df=products_df,
         departments_df=departments_df,
@@ -138,13 +155,14 @@ except Exception as e:
     products_df = pd.DataFrame()
     order_products_df = pd.DataFrame()
     storyteller = None
+    price_analyzer = None
 
 # Add 'All Departments' option to dropdown
 all_departments_option = pd.DataFrame({'department': ['All Departments']})
 departments_dropdown_df = pd.concat([all_departments_option, departments_df], ignore_index=True)
 
 # Initialize metrics
-metrics = BusinessMetrics(merged_df)
+metrics = BusinessMetrics(price_analyzer.merged_df if price_analyzer else merged_df)
 kpi_dashboard = KPIDashboard(metrics)
 
 # Define the layout of the application
@@ -152,9 +170,9 @@ app.layout = html.Div([
     html.H1('Instacart Market Basket Analysis Dashboard', 
             style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '30px'}),
     
-    dcc.Tabs([
+    dcc.Tabs(id='main-tabs', value='tab-0', children=[
         # Basic Analysis Tab
-        dcc.Tab(label='Basic Analysis', children=[
+        dcc.Tab(label='Basic Analysis', value='tab-0', children=[
     # Container for filters and controls
     html.Div([
         # Department Dropdown
@@ -214,7 +232,7 @@ app.layout = html.Div([
         ]),
         
         # Market Basket Analysis Tab
-        dcc.Tab(label='Market Basket Analysis', children=[
+        dcc.Tab(label='Market Basket Analysis', value='tab-1', children=[
             html.Div([
                 # Controls for market basket analysis
                 html.Div([
@@ -258,7 +276,7 @@ app.layout = html.Div([
         ]),
         
         # Customer Segmentation Tab
-        dcc.Tab(label='Customer Segmentation', children=[
+        dcc.Tab(label='Customer Segmentation', value='tab-2', children=[
             html.Div([
                 # Controls for customer segmentation
                 html.Div([
@@ -291,39 +309,26 @@ app.layout = html.Div([
             ])
         ]),
         
-        # Price Analysis Tab (only show if storyteller is initialized)
-        dcc.Tab(label='Price Analysis', children=[
+        # Price Analysis Tab (only show if price_analyzer is initialized)
+        dcc.Tab(label='Price Analysis', value='tab-3', children=[
             html.Div([
                 html.Div([
                     html.H2('Price Analysis and Customer Spending Patterns', 
                            style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
-                    dcc.Graph(figure=storyteller.create_story_visualization('price_analysis') if storyteller else go.Figure()),
-                    html.Div([
-                        html.Div([
-                            html.H3(section['title'], 
-                                   style={'color': '#2c3e50', 'marginBottom': '10px'}),
-                            html.Ul([
-                                html.Li(insight, style={'marginBottom': '5px'})
-                                for insight in section['insights']
-                            ])
-                        ], style={'marginBottom': '20px'})
-                        for section in (storyteller.generate_price_insights_story()['sections'] if storyteller else [])
-                    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
-                    
-                    html.Div([
-                        html.H3('Recommendations', 
-                               style={'color': '#2c3e50', 'marginBottom': '10px'}),
-                        html.Ul([
-                            html.Li(rec, style={'marginBottom': '5px'})
-                            for rec in (storyteller.generate_price_insights_story().get('recommendations', []) if storyteller else [])
-                        ])
-                    ], style={'padding': '20px', 'backgroundColor': '#e8f4f8', 'borderRadius': '5px', 'marginTop': '20px'})
-                ]) if storyteller else html.Div("Price analysis is not available. Please check the logs for details.")
+                    dcc.Graph(
+                        id='price-analysis-graph',
+                        figure=go.Figure()  # Start with empty figure
+                    ),
+                    html.Div(id='price-analysis-insights', 
+                            style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
+                    html.Div(id='price-analysis-recommendations',
+                            style={'padding': '20px', 'backgroundColor': '#e8f4f8', 'borderRadius': '5px', 'marginTop': '20px'})
+                ]) if price_analyzer else html.Div("Price analysis is not available. Please check the logs for details.")
             ], style={'padding': '20px'})
         ]),
         
         # Data Stories Tab (only show if storyteller is initialized)
-        dcc.Tab(label='Data Stories', children=[
+        dcc.Tab(label='Data Stories', value='tab-4', children=[
             html.Div([
                 html.Div([
                     html.H2('Customer Journey Insights', 
@@ -357,42 +362,12 @@ app.layout = html.Div([
                         ], style={'marginBottom': '20px'})
                         for section in (storyteller.generate_seasonal_trends_story()['sections'] if storyteller else [])
                     ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'})
-                ], style={'marginBottom': '40px'}),
-                
-                html.Div([
-                    html.H2('Product Association Insights', 
-                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
-                    html.Div([
-                        dcc.Input(
-                            id='min-support',
-                            type='number',
-                            value=0.01,
-                            min=0.001,
-                            max=0.1,
-                            step=0.001,
-                            style={'width': '150px', 'marginRight': '10px'}
-                        ),
-                        dcc.Input(
-                            id='min-confidence',
-                            type='number',
-                            value=0.1,
-                            min=0.01,
-                            max=0.5,
-                            step=0.01,
-                            style={'width': '150px'}
-                        ),
-                        html.Label('Min Support', style={'marginRight': '20px'}),
-                        html.Label('Min Confidence')
-                    ], style={'marginBottom': '20px', 'textAlign': 'center'}),
-                    dcc.Graph(id='association-rules-graph-detail'),
-                    html.Div(id='association-insights', 
-                            style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'})
-                ])
+                ], style={'marginBottom': '40px'})
             ], style={'padding': '20px'})
         ]) if storyteller else None,
         
         # KPI Dashboard Tab
-        dcc.Tab(label='Business KPIs', children=[
+        dcc.Tab(label='Business KPIs', value='tab-5', children=[
             kpi_dashboard.create_dashboard_layout()
         ])
     ]),
@@ -406,8 +381,11 @@ def safe_callback(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except dash.exceptions.PreventUpdate:
+            # Re-raise PreventUpdate without logging it as an error
+            raise
         except Exception as e:
-            logger.error(f"Error in callback {func.__name__}: {str(e)}")
+            logger.error(f"Error in callback {func.__name__}: {str(e)}", exc_info=True)
             # Return empty figures with error message
             return px.scatter(title=f"Error: {str(e)}")
     return wrapper
@@ -634,31 +612,6 @@ def update_segmentation(n_clusters, segmentation_type):
             template='plotly_white'
         )
 
-@app.callback(
-    [Output('association-rules-graph-detail', 'figure'),
-     Output('association-insights', 'children')],
-    [Input('min-support', 'value'),
-     Input('min-confidence', 'value')]
-)
-def update_association_rules(min_support, min_confidence):
-    """Update association rules visualization and insights based on thresholds."""
-    story = storyteller.generate_product_association_story(min_support, min_confidence)
-    fig = storyteller.create_story_visualization('product_associations')
-    
-    insights = html.Div([
-        html.Div([
-            html.H3(section['title'], 
-                   style={'color': '#2c3e50', 'marginBottom': '10px'}),
-            html.Ul([
-                html.Li(insight, style={'marginBottom': '5px'})
-                for insight in section['insights']
-            ])
-        ], style={'marginBottom': '20px'})
-        for section in story['sections']
-    ])
-    
-    return fig, insights
-
 # Add health check endpoint
 @server.route('/health')
 def health_check():
@@ -694,6 +647,97 @@ def internal_error(error):
         'status': 'error',
         'timestamp': datetime.now().isoformat()
     }), 500
+
+# Add callback for price analysis tab
+@app.callback(
+    [Output('price-analysis-graph', 'figure'),
+     Output('price-analysis-insights', 'children'),
+     Output('price-analysis-recommendations', 'children')],
+    [Input('main-tabs', 'value')]
+)
+@safe_callback
+def update_price_analysis(tab_value):
+    """Update price analysis when tab is clicked."""
+    try:
+        now = datetime.now().isoformat()
+        logger.info(f"[CALLBACK] Price analysis callback triggered at {now} with tab_value: {tab_value}")
+        logger.info(f"[CALLBACK] price_analyzer is {'initialized' if price_analyzer else 'None'} at {now}")
+        
+        # Only update if we're on the price analysis tab
+        if tab_value != 'tab-3':
+            logger.info(f"[CALLBACK] Not on price analysis tab, skipping update at {now}")
+            raise dash.exceptions.PreventUpdate
+        
+        if not price_analyzer:
+            logger.warning(f"[CALLBACK] Price analyzer not initialized at {now}")
+            return [go.Figure(), html.Div("Price analysis not available"), html.Div()]
+        
+        logger.info(f"[CALLBACK] Starting price analysis update at {now}")
+        start_time = time.time()
+        
+        # Get visualization (this should use cache after first call)
+        logger.info(f"[CALLBACK] Creating visualization at {now}")
+        viz_start = time.time()
+        try:
+            fig = price_analyzer.create_visualization()
+            logger.info(f"[CALLBACK] Visualization created in {time.time() - viz_start:.2f} seconds at {now}")
+        except Exception as viz_error:
+            logger.error(f"[CALLBACK] Error creating visualization: {repr(viz_error)}", exc_info=True)
+            raise
+        
+        # Get insights (this should use cache after first call)
+        logger.info(f"[CALLBACK] Getting price insights at {now}")
+        insights_start = time.time()
+        try:
+            insights_data = price_analyzer.get_price_insights()
+            logger.info(f"[CALLBACK] Insights retrieved in {time.time() - insights_start:.2f} seconds at {now}")
+        except Exception as insights_error:
+            logger.error(f"[CALLBACK] Error getting insights: {repr(insights_error)}", exc_info=True)
+            raise
+        
+        # Create insights HTML
+        try:
+            insights = html.Div([
+                html.Div([
+                    html.H3(section['title'], 
+                           style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                    html.Ul([
+                        html.Li(insight, style={'marginBottom': '5px'})
+                        for insight in section['insights']
+                    ])
+                ], style={'marginBottom': '20px'})
+                for section in insights_data['sections']
+            ])
+        except Exception as html_error:
+            logger.error(f"[CALLBACK] Error creating insights HTML: {repr(html_error)}", exc_info=True)
+            raise
+        
+        # Create recommendations HTML
+        try:
+            recommendations = html.Div([
+                html.H3('Recommendations', 
+                       style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                html.Ul([
+                    html.Li(rec, style={'marginBottom': '5px'})
+                    for rec in insights_data.get('recommendations', [])
+                ])
+            ])
+        except Exception as html_error:
+            logger.error(f"[CALLBACK] Error creating recommendations HTML: {repr(html_error)}", exc_info=True)
+            raise
+        
+        logger.info(f"[CALLBACK] Total price analysis update took {time.time() - start_time:.2f} seconds at {now}")
+        
+        # Return as a list of three elements
+        return [fig, insights, recommendations]
+        
+    except dash.exceptions.PreventUpdate:
+        logger.info(f"[CALLBACK] PreventUpdate raised at {datetime.now().isoformat()}")
+        raise
+    except Exception as e:
+        logger.error(f"[CALLBACK] Error in price analysis update: {repr(e)}", exc_info=True)
+        # Return a list of three elements even in case of error
+        return [go.Figure(), html.Div(f"Error in price analysis: {repr(e)}"), html.Div()]
 
 # Run the application
 if __name__ == '__main__':
