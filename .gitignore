@@ -69,4 +69,7 @@ Thumbs.db
 DataMiningFinalProject/
 
 # Java
-*.jar 
+*.jar
+
+# Ignore the data folder (and its CSV files) so that they are not added to git
+data/ 
