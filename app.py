@@ -234,45 +234,163 @@ app.layout = html.Div([
         # Market Basket Analysis Tab
         dcc.Tab(label='Market Basket Analysis', value='tab-1', children=[
             html.Div([
+                # Header with explanation
+                html.Div([
+                    html.H2('Market Basket Analysis - Product Association Insights', 
+                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '10px'}),
+                    html.P('Discover which products customers buy together and identify cross-selling opportunities', 
+                          style={'textAlign': 'center', 'color': '#7f8c8d', 'marginBottom': '30px'})
+                ]),
+                
                 # Controls for market basket analysis
                 html.Div([
-                    html.Label('Minimum Support:'),
-                    dcc.Slider(
-                        id='support-slider',
-                        min=0.001,
-                        max=0.02,
-                        step=0.001,
-                        value=0.001,
-                        marks={
-                            0.001: '0.1%',
-                            0.002: '0.2%',
-                            0.005: '0.5%',
-                            0.01: '1%',
-                            0.02: '2%'
-                        },
-                    ),
-                    html.Label('Minimum Confidence:'),
-                    dcc.Slider(
-                        id='confidence-slider',
-                        min=0.1,
-                        max=0.5,
-                        step=0.1,
-                        value=0.1,
-                        marks={
-                            0.1: '10%',
-                            0.2: '20%',
-                            0.3: '30%',
-                            0.4: '40%',
-                            0.5: '50%'
-                        },
-                    )
-                ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
+                    html.Div([
+                        html.Label('Minimum Support (How often items appear together):', 
+                                 style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                        dcc.Slider(
+                            id='support-slider',
+                            min=0.001,
+                            max=0.02,
+                            step=0.001,
+                            value=0.001,
+                            marks={
+                                0.001: '0.1%',
+                                0.002: '0.2%',
+                                0.005: '0.5%',
+                                0.01: '1%',
+                                0.02: '2%'
+                            },
+                            tooltip={'placement': 'bottom', 'always_visible': True}
+                        ),
+                        html.Div(id='support-explanation', 
+                                style={'fontSize': '12px', 'color': '#7f8c8d', 'marginTop': '5px'})
+                    ], style={'width': '48%', 'display': 'inline-block', 'marginRight': '2%'}),
+                    
+                    html.Div([
+                        html.Label('Minimum Confidence (How reliable the association is):', 
+                                 style={'fontWeight': 'bold', 'marginBottom': '5px'}),
+                        dcc.Slider(
+                            id='confidence-slider',
+                            min=0.1,
+                            max=0.5,
+                            step=0.1,
+                            value=0.1,
+                            marks={
+                                0.1: '10%',
+                                0.2: '20%',
+                                0.3: '30%',
+                                0.4: '40%',
+                                0.5: '50%'
+                            },
+                            tooltip={'placement': 'bottom', 'always_visible': True}
+                        ),
+                        html.Div(id='confidence-explanation', 
+                                style={'fontSize': '12px', 'color': '#7f8c8d', 'marginTop': '5px'})
+                    ], style={'width': '48%', 'display': 'inline-block', 'marginLeft': '2%'})
+                ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px', 'marginBottom': '20px'}),
                 
-                # Market Basket Analysis Results
+                # Metrics Explanation
                 html.Div([
-                    dcc.Graph(id='association-rules-graph-main')
-                ], style={'width': '100%', 'marginTop': '20px'})
-            ])
+                    html.H4('📊 Understanding the Metrics', style={'color': '#2c3e50', 'marginBottom': '15px'}),
+                    html.Div([
+                        html.Div([
+                            html.H5('Support', style={'color': '#3498db', 'marginBottom': '5px'}),
+                            html.P('How frequently items appear together in transactions. Higher support = more common combinations.', 
+                                  style={'fontSize': '14px', 'color': '#7f8c8d'})
+                        ], style={'width': '32%', 'display': 'inline-block', 'marginRight': '1%'}),
+                        html.Div([
+                            html.H5('Confidence', style={'color': '#e74c3c', 'marginBottom': '5px'}),
+                            html.P('How reliable the association is. If A is bought, how likely is B also bought?', 
+                                  style={'fontSize': '14px', 'color': '#7f8c8d'})
+                        ], style={'width': '32%', 'display': 'inline-block', 'marginRight': '1%'}),
+                        html.Div([
+                            html.H5('Lift', style={'color': '#27ae60', 'marginBottom': '5px'}),
+                            html.P('Strength of association. Lift > 1 = positive association, Lift > 2 = strong association.', 
+                                  style={'fontSize': '14px', 'color': '#7f8c8d'})
+                        ], style={'width': '32%', 'display': 'inline-block', 'marginLeft': '1%'})
+                    ])
+                ], style={'padding': '15px', 'backgroundColor': '#ecf0f1', 'borderRadius': '5px', 'marginBottom': '20px'}),
+                
+                # Key Metrics Summary
+                html.Div([
+                    html.H3('Key Insights Summary', style={'color': '#2c3e50', 'marginBottom': '15px'}),
+                    html.Div(id='market-basket-summary', 
+                            style={'padding': '15px', 'backgroundColor': '#e8f4f8', 'borderRadius': '5px'})
+                ], style={'marginBottom': '20px'}),
+                
+                # Main Visualizations
+                html.Div([
+                    # Top Product Associations
+                    html.Div([
+                        html.H4('Top Product Associations by Business Impact', 
+                               style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                        dcc.Graph(id='top-associations-chart')
+                    ], style={'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+                    
+                    # Association Network
+                    html.Div([
+                        html.H4('Product Association Network', 
+                               style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                        dcc.Graph(id='association-network-chart')
+                    ], style={'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'})
+                ], style={'marginBottom': '20px'}),
+                
+                # Department-Level Insights
+                html.Div([
+                    html.H4('Department-Level Associations', 
+                           style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                    dcc.Graph(id='department-associations-chart')
+                ], style={'marginBottom': '20px'}),
+                
+                # Business Recommendations
+                html.Div([
+                    html.H3('Business Recommendations', style={'color': '#2c3e50', 'marginBottom': '15px'}),
+                    html.Div(id='business-recommendations', 
+                            style={'padding': '20px', 'backgroundColor': '#e8f4f8', 'borderRadius': '5px'})
+                ], style={'marginBottom': '20px'}),
+                
+                # Actionable Insights
+                html.Div([
+                    html.H3('Actionable Insights', style={'color': '#2c3e50', 'marginBottom': '15px'}),
+                    html.Div([
+                        html.Div([
+                            html.H4('🎯 Cross-Selling Opportunities', style={'color': '#27ae60', 'marginBottom': '10px'}),
+                            html.P('Products that customers frequently buy together - perfect for bundling and recommendations', 
+                                  style={'color': '#7f8c8d', 'marginBottom': '15px'}),
+                            html.Div(id='cross-selling-insights', style={'fontSize': '14px'})
+                        ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top', 'marginRight': '2%'}),
+                        
+                        html.Div([
+                            html.H4('📊 Inventory Planning', style={'color': '#e74c3c', 'marginBottom': '10px'}),
+                            html.P('Use association patterns to optimize inventory levels and reduce stockouts', 
+                                  style={'color': '#7f8c8d', 'marginBottom': '15px'}),
+                            html.Div(id='inventory-insights', style={'fontSize': '14px'})
+                        ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top', 'marginLeft': '2%'})
+                    ])
+                ], style={'marginBottom': '20px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
+                
+                # Detailed Rules Table
+                html.Div([
+                    html.H4('Detailed Association Rules', 
+                           style={'color': '#2c3e50', 'marginBottom': '10px'}),
+                    html.Div([
+                        html.Label('Filter by Minimum Lift:', style={'marginRight': '10px'}),
+                        dcc.Dropdown(
+                            id='lift-filter',
+                            options=[
+                                {'label': 'All Rules', 'value': 0},
+                                {'label': 'Lift > 1.5', 'value': 1.5},
+                                {'label': 'Lift > 2.0', 'value': 2.0},
+                                {'label': 'Lift > 3.0', 'value': 3.0}
+                            ],
+                            value=0,
+                            style={'width': '200px', 'display': 'inline-block'}
+                        )
+                    ], style={'marginBottom': '15px'}),
+                    html.Div(id='association-rules-table', 
+                            style={'maxHeight': '400px', 'overflowY': 'auto'})
+                ])
+            ], style={'padding': '20px'})
         ]),
         
         # Customer Segmentation Tab
@@ -491,17 +609,110 @@ def update_graphs(selected_department, min_count, selected_day):
     
     return bar_fig, pie_fig, heatmap_fig
 
+# Helper function for market basket analysis
+def get_department_associations(rules_df, conn):
+    """
+    Create department-level associations from product-level rules
+    """
+    try:
+        # Get department information
+        dept_df = pd.read_sql_query("SELECT department_id, department FROM departments", conn)
+        dept_map = dict(zip(dept_df['department_id'], dept_df['department']))
+        
+        # Get product-department mapping
+        product_dept_df = pd.read_sql_query("SELECT product_id, department_id FROM products", conn)
+        product_dept_df = product_dept_df[product_dept_df['product_id'].notna()]
+        product_dept_map = dict(zip(product_dept_df['product_id'], product_dept_df['department_id']))
+        
+        # Create a mapping from product names to departments
+        # This is a simplified approach - in practice you'd need to join with product names
+        dept_associations = []
+        
+        # Group rules by lift ranges for better visualization
+        lift_ranges = {
+            'Very Strong (Lift > 3)': len(rules_df[rules_df['lift'] > 3]),
+            'Strong (Lift 2-3)': len(rules_df[(rules_df['lift'] > 2) & (rules_df['lift'] <= 3)]),
+            'Moderate (Lift 1.5-2)': len(rules_df[(rules_df['lift'] > 1.5) & (rules_df['lift'] <= 2)]),
+            'Weak (Lift 1-1.5)': len(rules_df[(rules_df['lift'] > 1) & (rules_df['lift'] <= 1.5)]),
+            'Very Weak (Lift ≤ 1)': len(rules_df[rules_df['lift'] <= 1])
+        }
+        
+        return lift_ranges
+        
+    except Exception as e:
+        logger.error(f"Error in department associations: {str(e)}")
+        return {}
+
+def generate_business_insights(rules_df):
+    """
+    Generate actionable business insights from market basket analysis
+    """
+    insights = []
+    
+    if len(rules_df) == 0:
+        return ["No association rules found with current parameters"]
+    
+    # Analyze rule strength distribution
+    strong_rules = rules_df[rules_df['lift'] > 2]
+    moderate_rules = rules_df[(rules_df['lift'] > 1.5) & (rules_df['lift'] <= 2)]
+    
+    if len(strong_rules) > 0:
+        insights.append(f"🎯 {len(strong_rules)} strong associations found - excellent cross-selling opportunities")
+        
+        # Find the strongest rule
+        strongest_rule = rules_df.loc[rules_df['lift'].idxmax()]
+        insights.append(f"💡 Strongest association: {', '.join(strongest_rule['antecedents'])} → {', '.join(strongest_rule['consequents'])} (Lift: {strongest_rule['lift']:.2f})")
+    
+    if len(moderate_rules) > 0:
+        insights.append(f"📈 {len(moderate_rules)} moderate associations - good potential for targeted marketing")
+    
+    # Analyze confidence levels
+    high_confidence_rules = rules_df[rules_df['confidence'] > 0.5]
+    if len(high_confidence_rules) > 0:
+        insights.append(f"🎯 {len(high_confidence_rules)} high-confidence rules - very reliable for recommendations")
+    
+    # Analyze support levels
+    high_support_rules = rules_df[rules_df['support'] > 0.01]
+    if len(high_support_rules) > 0:
+        insights.append(f"📊 {len(high_support_rules)} frequently occurring patterns - high-volume opportunities")
+    
+    # Business recommendations
+    if rules_df['lift'].mean() > 2:
+        insights.append("🚀 Overall strong associations - consider implementing recommendation engine")
+    
+    if rules_df['confidence'].mean() > 0.3:
+        insights.append("✅ High average confidence - reliable for automated recommendations")
+    
+    if len(rules_df) > 100:
+        insights.append("📋 Rich pattern database - excellent foundation for personalization")
+    
+    return insights
+
 # Add new callback for market basket analysis
 @app.callback(
-    Output('association-rules-graph-main', 'figure'),
+    [Output('market-basket-summary', 'children'),
+     Output('top-associations-chart', 'figure'),
+     Output('association-network-chart', 'figure'),
+     Output('department-associations-chart', 'figure'),
+     Output('business-recommendations', 'children'),
+     Output('cross-selling-insights', 'children'),
+     Output('inventory-insights', 'children'),
+     Output('association-rules-table', 'children'),
+     Output('support-explanation', 'children'),
+     Output('confidence-explanation', 'children')],
     [Input('support-slider', 'value'),
-     Input('confidence-slider', 'value')]
+     Input('confidence-slider', 'value'),
+     Input('lift-filter', 'value')]
 )
 @safe_callback
-def update_market_basket(support, confidence):
+def update_market_basket(support, confidence, lift_filter):
     """
     Update market basket analysis visualization based on selected parameters
     """
+    # Update explanations
+    support_explanation = f"Items appear together in {support*100:.1f}% of all transactions"
+    confidence_explanation = f"When customers buy the first item, they buy the second item {confidence*100:.0f}% of the time"
+    
     # Get rules from database that match the selected parameters
     with engine.connect() as conn:
         rules_df = pd.read_sql_query("""
@@ -521,38 +732,208 @@ def update_market_basket(support, confidence):
         """, conn, params=(support, confidence))
     
     if rules_df.empty:
-        # Return empty figure if no rules found
-        return px.scatter(
+        # Return empty figures and messages if no rules found
+        empty_fig = px.scatter(
             title='No rules found for selected parameters. Try adjusting support/confidence.'
         ).update_layout(
-            height=600,
+            height=400,
             template='plotly_white',
             xaxis_title='Support',
             yaxis_title='Confidence'
+        )
+        
+        return (
+            html.Div("No association rules found with current parameters. Try lowering the thresholds."),
+            empty_fig,
+            empty_fig,
+            empty_fig,
+            html.Div("No recommendations available with current parameters."),
+            html.Div("No cross-selling insights available with current parameters."),
+            html.Div("No inventory insights available with current parameters."),
+            html.Div("No rules to display."),
+            support_explanation,
+            confidence_explanation
         )
     
     # Parse JSON strings back to lists
     rules_df['antecedents'] = rules_df['antecedents'].apply(json.loads)
     rules_df['consequents'] = rules_df['consequents'].apply(json.loads)
     
-    # Create visualization
-    fig = px.scatter(
+    # Create summary metrics
+    total_rules = len(rules_df)
+    avg_lift = rules_df['lift'].mean()
+    max_lift = rules_df['lift'].max()
+    high_lift_rules = len(rules_df[rules_df['lift'] > 2])
+    
+    summary_content = html.Div([
+        html.Div([
+            html.H4(f"{total_rules:,}", style={'color': '#2c3e50', 'margin': '0'}),
+            html.P("Total Rules", style={'color': '#7f8c8d', 'margin': '0', 'fontSize': '12px'})
+        ], style={'textAlign': 'center', 'width': '25%', 'display': 'inline-block'}),
+        html.Div([
+            html.H4(f"{avg_lift:.2f}", style={'color': '#2c3e50', 'margin': '0'}),
+            html.P("Avg Lift", style={'color': '#7f8c8d', 'margin': '0', 'fontSize': '12px'})
+        ], style={'textAlign': 'center', 'width': '25%', 'display': 'inline-block'}),
+        html.Div([
+            html.H4(f"{max_lift:.2f}", style={'color': '#2c3e50', 'margin': '0'}),
+            html.P("Max Lift", style={'color': '#7f8c8d', 'margin': '0', 'fontSize': '12px'})
+        ], style={'textAlign': 'center', 'width': '25%', 'display': 'inline-block'}),
+        html.Div([
+            html.H4(f"{high_lift_rules}", style={'color': '#2c3e50', 'margin': '0'}),
+            html.P("Strong Rules (Lift>2)", style={'color': '#7f8c8d', 'margin': '0', 'fontSize': '12px'})
+        ], style={'textAlign': 'center', 'width': '25%', 'display': 'inline-block'})
+    ])
+    
+    # Create top associations chart
+    top_rules = rules_df.head(10)
+    
+    # Create a more readable format for product names
+    def format_product_names(products):
+        if len(products) == 1:
+            return products[0][:30] + "..." if len(products[0]) > 30 else products[0]
+        else:
+            return f"{len(products)} products"
+    
+    top_associations_fig = px.bar(
+        x=[f"{format_product_names(ant)} → {format_product_names(cons)}" 
+           for ant, cons in zip(top_rules['antecedents'], top_rules['consequents'])],
+        y=top_rules['lift'],
+        title='Top Product Associations by Business Impact (Lift Score)',
+        labels={'x': 'Product Association', 'y': 'Lift Score'},
+        color=top_rules['confidence'],
+        color_continuous_scale='Viridis',
+        hover_data={
+            'antecedents': [', '.join(ant) for ant in top_rules['antecedents']],
+            'consequents': [', '.join(cons) for cons in top_rules['consequents']],
+            'support': [f"{s:.4f}" for s in top_rules['support']],
+            'confidence': [f"{c:.4f}" for c in top_rules['confidence']]
+        }
+    )
+    top_associations_fig.update_layout(
+        height=400,
+        template='plotly_white',
+        xaxis_tickangle=-45,
+        coloraxis_colorbar=dict(title="Confidence"),
+        hovermode='closest'
+    )
+    
+    # Create association network chart (simplified version)
+    network_fig = px.scatter(
         rules_df,
         x='support',
         y='confidence',
         size='lift',
+        color='lift',
         hover_data=['antecedents', 'consequents'],
-        title='Product Association Rules'
+        title='Association Rules Network (Size = Lift, Color = Lift)',
+        labels={'support': 'Support', 'confidence': 'Confidence', 'lift': 'Lift'}
     )
-    
-    fig.update_layout(
-        height=600,
+    network_fig.update_layout(
+        height=400,
         template='plotly_white',
-        xaxis_title='Support',
-        yaxis_title='Confidence'
+        coloraxis_colorbar=dict(title="Lift Score")
     )
     
-    return fig
+    # Create department associations chart
+    try:
+        lift_ranges = get_department_associations(rules_df, conn)
+        
+        if lift_ranges:
+            # Create bar chart of lift ranges
+            dept_fig = px.bar(
+                x=list(lift_ranges.keys()),
+                y=list(lift_ranges.values()),
+                title='Distribution of Association Rule Strengths',
+                labels={'x': 'Lift Range', 'y': 'Number of Rules'},
+                color=list(lift_ranges.values()),
+                color_continuous_scale='RdYlGn'
+            )
+            dept_fig.update_layout(
+                height=400, 
+                template='plotly_white',
+                xaxis_tickangle=-45,
+                coloraxis_colorbar=dict(title="Count")
+            )
+        else:
+            dept_fig = px.scatter(title='No department associations available').update_layout(height=400, template='plotly_white')
+    except:
+        dept_fig = px.scatter(title='Department analysis not available').update_layout(height=400, template='plotly_white')
+    
+    # Create business recommendations
+    insights = generate_business_insights(rules_df)
+    
+    if not insights:
+        insights = ["Consider lowering thresholds to find more association patterns"]
+    
+    recommendations_content = html.Ul([
+        html.Li(insight, style={'marginBottom': '8px'}) for insight in insights
+    ], style={'margin': '0', 'paddingLeft': '20px'})
+    
+    # Create cross-selling insights
+    strong_associations = rules_df[rules_df['lift'] > 2].head(3)
+    cross_selling_content = []
+    
+    if len(strong_associations) > 0:
+        cross_selling_content.append(html.P("Top cross-selling opportunities:", style={'fontWeight': 'bold'}))
+        for _, rule in strong_associations.iterrows():
+            cross_selling_content.append(html.P(
+                f"• {', '.join(rule['antecedents'])} → {', '.join(rule['consequents'])} (Lift: {rule['lift']:.2f})",
+                style={'marginLeft': '20px', 'marginBottom': '5px'}
+            ))
+    else:
+        cross_selling_content.append(html.P("No strong cross-selling opportunities found with current thresholds."))
+    
+    # Create inventory insights
+    high_support_rules = rules_df[rules_df['support'] > 0.005].head(3)
+    inventory_content = []
+    
+    if len(high_support_rules) > 0:
+        inventory_content.append(html.P("Frequently co-purchased items (stock together):", style={'fontWeight': 'bold'}))
+        for _, rule in high_support_rules.iterrows():
+            inventory_content.append(html.P(
+                f"• {', '.join(rule['antecedents'])} + {', '.join(rule['consequents'])} (Support: {rule['support']:.3f})",
+                style={'marginLeft': '20px', 'marginBottom': '5px'}
+            ))
+    else:
+        inventory_content.append(html.P("No high-frequency patterns found with current thresholds."))
+    
+    # Create detailed rules table
+    # Apply lift filter
+    filtered_rules = rules_df[rules_df['lift'] >= lift_filter] if lift_filter > 0 else rules_df
+    
+    table_data = []
+    for _, rule in filtered_rules.head(20).iterrows():
+        table_data.append(html.Tr([
+            html.Td(', '.join(rule['antecedents']), style={'padding': '8px', 'border': '1px solid #ddd'}),
+            html.Td(', '.join(rule['consequents']), style={'padding': '8px', 'border': '1px solid #ddd'}),
+            html.Td(f"{rule['support']:.4f}", style={'padding': '8px', 'border': '1px solid #ddd'}),
+            html.Td(f"{rule['confidence']:.4f}", style={'padding': '8px', 'border': '1px solid #ddd'}),
+            html.Td(f"{rule['lift']:.2f}", style={'padding': '8px', 'border': '1px solid #ddd'})
+        ]))
+    
+    table_content = html.Table([
+        html.Thead(html.Tr([
+            html.Th('Antecedent', style={'padding': '8px', 'border': '1px solid #ddd', 'backgroundColor': '#f8f9fa'}),
+            html.Th('Consequent', style={'padding': '8px', 'border': '1px solid #ddd', 'backgroundColor': '#f8f9fa'}),
+            html.Th('Support', style={'padding': '8px', 'border': '1px solid #ddd', 'backgroundColor': '#f8f9fa'}),
+            html.Th('Confidence', style={'padding': '8px', 'border': '1px solid #ddd', 'backgroundColor': '#f8f9fa'}),
+            html.Th('Lift', style={'padding': '8px', 'border': '1px solid #ddd', 'backgroundColor': '#f8f9fa'})
+        ])),
+        html.Tbody(table_data)
+    ], style={'width': '100%', 'borderCollapse': 'collapse'})
+    
+    return (
+        summary_content,
+        top_associations_fig,
+        network_fig,
+        dept_fig,
+        recommendations_content,
+        cross_selling_content,
+        inventory_content,
+        table_content,
+        support_explanation,
+        confidence_explanation
+    )
 
 @app.callback(
     Output('segmentation-graph', 'figure'),
