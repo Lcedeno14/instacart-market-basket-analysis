@@ -610,24 +610,11 @@ def update_graphs(selected_department, min_count, selected_day):
     return bar_fig, pie_fig, heatmap_fig
 
 # Helper function for market basket analysis
-def get_department_associations(rules_df, conn):
+def get_department_associations(rules_df):
     """
     Create department-level associations from product-level rules
     """
     try:
-        # Get department information
-        dept_df = pd.read_sql_query("SELECT department_id, department FROM departments", conn)
-        dept_map = dict(zip(dept_df['department_id'], dept_df['department']))
-        
-        # Get product-department mapping
-        product_dept_df = pd.read_sql_query("SELECT product_id, department_id FROM products", conn)
-        product_dept_df = product_dept_df[product_dept_df['product_id'].notna()]
-        product_dept_map = dict(zip(product_dept_df['product_id'], product_dept_df['department_id']))
-        
-        # Create a mapping from product names to departments
-        # This is a simplified approach - in practice you'd need to join with product names
-        dept_associations = []
-        
         # Group rules by lift ranges for better visualization
         lift_ranges = {
             'Very Strong (Lift > 3)': len(rules_df[rules_df['lift'] > 3]),
@@ -730,6 +717,20 @@ def update_market_basket(support, confidence, lift_filter):
             AND confidence_param = %s
             ORDER BY lift DESC
         """, conn, params=(support, confidence))
+        
+        # Get department information within the same connection
+        try:
+            dept_df = pd.read_sql_query("SELECT department_id, department FROM departments", conn)
+            dept_map = dict(zip(dept_df['department_id'], dept_df['department']))
+            
+            # Get product-department mapping
+            product_dept_df = pd.read_sql_query("SELECT product_id, department_id FROM products", conn)
+            product_dept_df = product_dept_df[product_dept_df['product_id'].notna()]
+            product_dept_map = dict(zip(product_dept_df['product_id'], product_dept_df['department_id']))
+        except Exception as e:
+            logger.error(f"Error fetching department data: {str(e)}")
+            dept_map = {}
+            product_dept_map = {}
     
     if rules_df.empty:
         # Return empty figures and messages if no rules found
@@ -836,7 +837,7 @@ def update_market_basket(support, confidence, lift_filter):
     
     # Create department associations chart
     try:
-        lift_ranges = get_department_associations(rules_df, conn)
+        lift_ranges = get_department_associations(rules_df)
         
         if lift_ranges:
             # Create bar chart of lift ranges
