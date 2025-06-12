@@ -161,24 +161,36 @@ def register_market_basket_callbacks(app, merged_df, logger):
             return "Click 'Generate Random Product' to start", "FP-Growth results will appear here", "Apriori results will appear here"
         
         try:
-            # Get random product
-            unique_products = merged_df[['product_id', 'product_name']].drop_duplicates()
-            random_product = unique_products.sample(1).iloc[0]
-            product_id = random_product['product_id']
-            product_name = random_product['product_name']
+            # Get products that actually appear in transactions (have associations)
+            products_with_transactions = merged_df[['product_id', 'product_name']].drop_duplicates()
+            
+            # Filter to products that appear in multiple orders (more likely to have associations)
+            product_order_counts = merged_df.groupby('product_id')['order_id'].nunique()
+            products_with_multiple_orders = product_order_counts[product_order_counts >= 5].index.tolist()
+            
+            if not products_with_multiple_orders:
+                # Fallback to any product if none have multiple orders
+                products_with_multiple_orders = products_with_transactions['product_id'].tolist()
+            
+            # Select random product from those with multiple orders
+            random_product_id = random.choice(products_with_multiple_orders)
+            random_product_name = products_with_transactions[products_with_transactions['product_id'] == random_product_id]['product_name'].iloc[0]
+            
+            logger.info(f"Selected random product: {random_product_name} (ID: {random_product_id})")
             
             # Get associations using both algorithms
-            fpgrowth_associations = get_fpgrowth_associations(merged_df, product_id, logger)
-            apriori_associations = get_apriori_associations(merged_df, product_id, logger)
+            fpgrowth_associations = get_fpgrowth_associations(merged_df, random_product_id, logger)
+            apriori_associations = get_apriori_associations(merged_df, random_product_id, logger)
             
             # Format results
             selected_product_html = html.Div([
-                html.H4(f"Selected Product: {product_name}", style={'color': '#2c3e50'}),
-                html.P(f"Product ID: {product_id}", style={'color': '#7f8c8d'})
+                html.H4(f"Selected Product: {random_product_name}", style={'color': '#2c3e50'}),
+                html.P(f"Product ID: {random_product_id}", style={'color': '#7f8c8d'}),
+                html.P(f"Appears in {product_order_counts[random_product_id]} orders", style={'color': '#7f8c8d', 'fontSize': '14px'})
             ])
             
-            fpgrowth_html = format_associations(fpgrowth_associations, "FP-Growth")
-            apriori_html = format_associations(apriori_associations, "Apriori")
+            fpgrowth_html = format_associations(fpgrowth_associations, "FP-Growth", merged_df)
+            apriori_html = format_associations(apriori_associations, "Apriori", merged_df)
             
             return selected_product_html, fpgrowth_html, apriori_html
             
@@ -244,14 +256,19 @@ def get_fpgrowth_associations(merged_df, product_id, logger):
         te_ary = te.fit(transaction_list).transform(transaction_list)
         df_encoded = pd.DataFrame(te_ary, columns=te.columns_)
         
-        # Run FP-Growth
-        frequent_itemsets = fpgrowth(df_encoded, min_support=0.01, use_colnames=True)
+        # Run FP-Growth with lower support for more associations
+        frequent_itemsets = fpgrowth(df_encoded, min_support=0.005, use_colnames=True)
         
         if len(frequent_itemsets) == 0:
+            logger.warning("No frequent itemsets found with FP-Growth")
             return []
         
         # Generate association rules
-        rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=0.1)
+        rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=0.05)
+        
+        if len(rules) == 0:
+            logger.warning("No association rules found with FP-Growth")
+            return []
         
         # Filter rules for the selected product
         product_associations = []
@@ -280,6 +297,7 @@ def get_fpgrowth_associations(merged_df, product_id, logger):
         
         # Sort by lift and get top 5
         product_associations.sort(key=lambda x: x['lift'], reverse=True)
+        logger.info(f"FP-Growth found {len(product_associations)} associations for product {product_id}")
         return product_associations[:5]
         
     except Exception as e:
@@ -298,14 +316,19 @@ def get_apriori_associations(merged_df, product_id, logger):
         te_ary = te.fit(transaction_list).transform(transaction_list)
         df_encoded = pd.DataFrame(te_ary, columns=te.columns_)
         
-        # Run Apriori
-        frequent_itemsets = apriori(df_encoded, min_support=0.01, use_colnames=True)
+        # Run Apriori with lower support for more associations
+        frequent_itemsets = apriori(df_encoded, min_support=0.005, use_colnames=True)
         
         if len(frequent_itemsets) == 0:
+            logger.warning("No frequent itemsets found with Apriori")
             return []
         
         # Generate association rules
-        rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=0.1)
+        rules = association_rules(frequent_itemsets, metric="confidence", min_threshold=0.05)
+        
+        if len(rules) == 0:
+            logger.warning("No association rules found with Apriori")
+            return []
         
         # Filter rules for the selected product
         product_associations = []
@@ -334,13 +357,14 @@ def get_apriori_associations(merged_df, product_id, logger):
         
         # Sort by lift and get top 5
         product_associations.sort(key=lambda x: x['lift'], reverse=True)
+        logger.info(f"Apriori found {len(product_associations)} associations for product {product_id}")
         return product_associations[:5]
         
     except Exception as e:
         logger.error(f"Error in get_apriori_associations: {str(e)}")
         return []
 
-def format_associations(associations, algorithm_name):
+def format_associations(associations, algorithm_name, merged_df):
     """Format association results for display."""
     if not associations:
         return html.Div([
@@ -348,12 +372,12 @@ def format_associations(associations, algorithm_name):
             html.P("No strong associations found", style={'color': '#7f8c8d', 'fontStyle': 'italic'})
         ])
     
-    # Get product names
+    # Get product names from merged_df
     product_names = {}
     for assoc in associations:
         product_id = assoc['product_id']
-        # This would normally query a product lookup table
-        product_names[product_id] = f"Product {product_id}"
+        product_name = merged_df[merged_df['product_id'] == product_id]['product_name'].iloc[0] if len(merged_df[merged_df['product_id'] == product_id]) > 0 else f"Product {product_id}"
+        product_names[product_id] = product_name
     
     return html.Div([
         html.H5(f"{algorithm_name} Top Recommendations", style={'color': '#2c3e50', 'marginBottom': '10px'}),
