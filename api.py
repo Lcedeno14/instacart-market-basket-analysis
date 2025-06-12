@@ -6,16 +6,21 @@ import logging
 from functools import wraps
 from datetime import datetime, timedelta
 import json
+from src.utils.logging_config import setup_logging, get_logger
+from src.analysis.data_processor import DataProcessor
+from src.analysis.data_storytelling import DataStorytelling
+from src.analysis.metrics import BusinessMetrics
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Set up logging for API
+logger = setup_logging('api')
 
 # Create Blueprint
 api = Blueprint('api', __name__)
 
 # Database connection
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///instacart.db")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable must be set")
 engine = create_engine(DATABASE_URL)
 
 def handle_errors(f):

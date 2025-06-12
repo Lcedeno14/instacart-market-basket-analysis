@@ -6,39 +6,72 @@ from plotly.subplots import make_subplots
 import logging
 import os
 from sqlalchemy import create_engine, text
+import time
+from functools import wraps
 
 logger = logging.getLogger(__name__)
+
+def timing_decorator(func):
+    """Decorator to measure function execution time"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        logger.info(f"{func.__name__} took {end_time - start_time:.2f} seconds to execute")
+        return result
+    return wrapper
 
 class DataStorytelling:
     """Generate narrative insights and stories from Instacart data analysis."""
     
-    def __init__(self, orders_df: pd.DataFrame, products_df: pd.DataFrame, 
-                 departments_df: pd.DataFrame, order_products_df: pd.DataFrame):
+    def __init__(self, orders_df: pd.DataFrame = None, products_df: pd.DataFrame = None, 
+                 departments_df: pd.DataFrame = None, order_products_df: pd.DataFrame = None,
+                 merged_df: pd.DataFrame = None):
         """
-        Initialize with the necessary dataframes.
+        Initialize with either separate dataframes or already-merged data.
         
         Parameters:
         -----------
-        orders_df : pd.DataFrame
+        orders_df : pd.DataFrame, optional
             DataFrame containing order information
-        products_df : pd.DataFrame
+        products_df : pd.DataFrame, optional
             DataFrame containing product information
-        departments_df : pd.DataFrame
+        departments_df : pd.DataFrame, optional
             DataFrame containing department information
-        order_products_df : pd.DataFrame
+        order_products_df : pd.DataFrame, optional
             DataFrame containing order-product relationships
+        merged_df : pd.DataFrame, optional
+            Already-merged DataFrame with all necessary data
         """
-        self.orders_df = orders_df
-        self.products_df = products_df
-        self.departments_df = departments_df
-        self.order_products_df = order_products_df
         self.engine = create_engine(os.getenv('DATABASE_URL'))
         
-        # Initialize prices_df first
-        self.prices_df = self._load_price_data()
+        if merged_df is not None:
+            # Use already-merged data
+            self.merged_df = merged_df.copy()
+            logger.info("Using pre-merged data for DataStorytelling")
+        else:
+            # Fall back to original behavior for backward compatibility
+            self.orders_df = orders_df
+            self.products_df = products_df
+            self.departments_df = departments_df
+            self.order_products_df = order_products_df
+            
+            # Initialize prices_df first
+            self.prices_df = self._load_price_data()
+            
+            # Then prepare merged data
+            self.merged_df = self._prepare_data()
         
-        # Then prepare merged data
-        self.merged_df = self._prepare_data()
+        # Add price data if not already present
+        if 'price' not in self.merged_df.columns:
+            self._add_price_data()
+        
+        # Cache for insights
+        self._insights_cache = None
+        
+        # Cache for visualizations
+        self._visualization_cache = None
     
     def _load_price_data(self) -> pd.DataFrame:
         """Load product price data from the database."""
@@ -114,6 +147,31 @@ class DataStorytelling:
         except Exception as e:
             logger.error(f"Error preparing data: {str(e)}")
             return pd.DataFrame()
+    
+    def _add_price_data(self):
+        """Add price information to the merged dataframe if not present."""
+        try:
+            # Load price data
+            prices_df = self._load_price_data()
+            
+            if not prices_df.empty:
+                # Merge price data
+                self.merged_df = self.merged_df.merge(
+                    prices_df[['product_id', 'price']],
+                    on='product_id',
+                    how='left'
+                )
+                
+                # Fill missing prices with department average
+                dept_avg_prices = self.merged_df.groupby('department_id')['price'].transform('mean')
+                self.merged_df['price'] = self.merged_df['price'].fillna(dept_avg_prices)
+                
+                logger.info("Successfully added price data to merged dataframe")
+            else:
+                logger.warning("No price data available")
+                
+        except Exception as e:
+            logger.error(f"Error adding price data: {str(e)}")
     
     def generate_customer_journey_story(self) -> Dict:
         """

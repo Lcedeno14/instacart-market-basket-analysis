@@ -50,6 +50,8 @@ cache/
 
 # Logs
 *.log
+logs/
+!logs/.gitkeep
 
 # OS
 .DS_Store
@@ -72,4 +74,4 @@ DataMiningFinalProject/
 *.jar
 
 # Ignore the data folder (and its CSV files) so that they are not added to git
-data/ 
+data/ instacart.db.backup

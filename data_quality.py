@@ -4,10 +4,10 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 import os
 import logging
+from src.utils.logging_config import setup_logging, get_logger
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Set up logging for data quality
+logger = setup_logging('data_quality')
 
 def check_data_quality():
     """
@@ -25,7 +25,7 @@ def check_data_quality():
         
         with engine.connect() as conn:
             # 1. Check if all required tables exist (PostgreSQL compatible)
-            required_tables = ['orders', 'products', 'departments', 'order_products', 'market_basket_rules']
+            required_tables = ['orders', 'products', 'departments', 'order_products', 'aisles', 'products_with_price']
             existing_tables = pd.read_sql_query(
                 text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"), 
                 conn
@@ -36,8 +36,13 @@ def check_data_quality():
                 logger.error(f"Missing tables: {missing_tables}")
                 checks_passed = False
             
-            # 2. Check for null values in critical columns
-            for table in existing_tables:
+            # 2. Check for null values in critical columns (only business tables)
+            business_tables = ['orders', 'products', 'departments', 'order_products', 'aisles', 'products_with_price']
+            
+            for table in business_tables:
+                if table not in existing_tables:
+                    continue
+                    
                 # Get columns for this table
                 columns = pd.read_sql_query(
                     text(f"SELECT column_name FROM information_schema.columns WHERE table_name = :table"), 
@@ -46,8 +51,8 @@ def check_data_quality():
                 )['column_name'].tolist()
                 
                 for col in columns:
-                    # Skip market_basket_rules table as it's not critical
-                    if table == 'market_basket_rules':
+                    # Skip non-critical columns and tables
+                    if table == 'etl_metadata' or table == 'market_basket_rules':
                         continue
                     # Rule 1: Ignore nulls in days_since_prior_order in orders table
                     if table == 'orders' and col == 'days_since_prior_order':
@@ -57,6 +62,9 @@ def check_data_quality():
                         # Remove products with no price
                         conn.execute(text("DELETE FROM products_with_price WHERE price IS NULL"))
                         conn.commit()
+                        continue
+                    # Rule 3: Ignore nulls in error_message columns (they're normal for successful processing)
+                    if col == 'error_message':
                         continue
                     
                     # Check for nulls using parameterized query
@@ -91,6 +99,20 @@ def check_data_quality():
                 FROM order_products op
                 LEFT JOIN orders o ON op.order_id = o.order_id
                 WHERE o.order_id IS NULL
+                """),
+                # Check if all aisle_ids in products exist in aisles
+                text("""
+                SELECT COUNT(*) as invalid_count
+                FROM products p
+                LEFT JOIN aisles a ON p.aisle_id = a.aisle_id
+                WHERE a.aisle_id IS NULL AND p.aisle_id IS NOT NULL
+                """),
+                # Check if all product_ids in products_with_price exist in products
+                text("""
+                SELECT COUNT(*) as invalid_count
+                FROM products_with_price pwp
+                LEFT JOIN products p ON pwp.product_id = p.product_id
+                WHERE p.product_id IS NULL
                 """)
             ]
             
@@ -105,7 +127,9 @@ def check_data_quality():
                 'orders': 1000,
                 'products': 100,
                 'departments': 10,
-                'order_products': 5000
+                'order_products': 5000,
+                'aisles': 10,
+                'products_with_price': 100
             }
             
             for table, min_count in min_row_counts.items():
@@ -119,9 +143,8 @@ def check_data_quality():
                         checks_passed = False
             
             # 5. Check for duplicate primary keys
-            for table in existing_tables:
-                # Skip market_basket_rules as it doesn't have a primary key
-                if table == 'market_basket_rules':
+            for table in business_tables:
+                if table not in existing_tables:
                     continue
                     
                 # Use PostgreSQL information_schema for primary key columns
@@ -157,7 +180,4 @@ def check_data_quality():
         
     except Exception as e:
         logger.error(f"Error during data quality check: {str(e)}")
-        return False
-
-if __name__ == "__main__":
-    check_data_quality() 
+        return False 

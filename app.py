@@ -20,26 +20,24 @@ from data_quality import check_data_quality
 from flask import jsonify
 import json
 from src.analysis.data_storytelling import DataStorytelling
-from src.analysis.price_analysis import PriceAnalysis
+from src.analysis.data_processor import DataProcessor
 import plotly.graph_objects as go
 from src.analysis.metrics import BusinessMetrics
 from src.visualization.kpi_dashboard import KPIDashboard
 import time
+from src.tabs.basic_analysis_tab import get_basic_analysis_tab_layout, register_basic_analysis_callbacks
+from src.tabs.market_basket_tab import get_market_basket_tab_layout, register_market_basket_callbacks
+from src.tabs.price_analysis_tab import get_price_analysis_tab_layout, register_price_analysis_callbacks
+from src.tabs.data_stories_tab import get_data_stories_tab_layout
+from src.tabs.kpi_dashboard_tab import get_kpi_dashboard_tab_layout
+from src.tabs.executive_dashboard_tab import get_executive_dashboard_tab_layout, ExecutiveDashboard
+from src.tabs.product_category_performance_tab import get_product_category_performance_tab_layout, ProductCategoryPerformanceDashboard
+from src.tabs.customer_behavior_tab import get_customer_behavior_tab_layout, CustomerBehaviorDashboard
+from src.utils.logging_config import setup_global_logging, get_logger
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),  # This ensures logs go to console
-        logging.FileHandler('app.log')  # This will also save logs to a file
-    ]
-)
-logger = logging.getLogger(__name__)
-
-# Set specific logger levels for our modules
-logging.getLogger('src.analysis.price_analysis').setLevel(logging.INFO)
-logging.getLogger('src.analysis.data_storytelling').setLevel(logging.INFO)
+# Set up global logging configuration
+setup_global_logging()
+logger = get_logger('app')
 
 # Initialize the Dash application
 # This creates a Flask server under the hood
@@ -80,6 +78,7 @@ def load_data():
                 p.product_name,
                 d.department,
                 d.department_id,
+                a.aisle,
                 o.order_dow,
                 o.order_hour_of_day,
                 o.order_id,
@@ -93,6 +92,7 @@ def load_data():
             FROM order_products op
             JOIN products p ON op.product_id = p.product_id
             JOIN departments d ON p.department_id = d.department_id
+            JOIN aisles a ON p.aisle_id = a.aisle_id
             JOIN orders o ON op.order_id = o.order_id
             """
             merged_df = pd.read_sql_query(query, conn)
@@ -108,7 +108,7 @@ def load_data():
         # Return empty DataFrames with the correct structure
         return pd.DataFrame(columns=['department']), pd.DataFrame()
 
-# Initialize data storyteller and price analyzer with the correct dataframes
+# Initialize data storyteller and data processor
 try:
     departments_df, merged_df = load_data()
     
@@ -125,20 +125,11 @@ try:
     # Get products dataframe
     products_df = merged_df[['product_id', 'product_name', 'department_id']].drop_duplicates()
     
-    # Initialize data storyteller and price analyzer
-    storyteller = DataStorytelling(
-        orders_df=orders_df,
-        products_df=products_df,
-        departments_df=departments_df,
-        order_products_df=order_products_df
-    )
+    # Initialize data storyteller and data processor
+    storyteller = DataStorytelling(merged_df=merged_df)
     
-    price_analyzer = PriceAnalysis(
-        orders_df=orders_df,
-        products_df=products_df,
-        departments_df=departments_df,
-        order_products_df=order_products_df
-    )
+    # Pass already-merged data to DataProcessor to avoid redundant merging
+    data_processor = DataProcessor(merged_df=merged_df)
     
 except Exception as e:
     logger.error(f"Failed to load initial data: {str(e)}")
@@ -148,310 +139,45 @@ except Exception as e:
     products_df = pd.DataFrame()
     order_products_df = pd.DataFrame()
     storyteller = None
-    price_analyzer = None
+    data_processor = None
 
 # Add 'All Departments' option to dropdown
 all_departments_option = pd.DataFrame({'department': ['All Departments']})
 departments_dropdown_df = pd.concat([all_departments_option, departments_df], ignore_index=True)
 
 # Initialize metrics
-metrics = BusinessMetrics(price_analyzer.merged_df if price_analyzer else merged_df)
+metrics = BusinessMetrics(data_processor.merged_df if data_processor else merged_df)
 kpi_dashboard = KPIDashboard(metrics)
+
+# Initialize Executive Dashboard with the same data source as KPI Dashboard
+executive_dashboard = ExecutiveDashboard(data_processor.merged_df if data_processor else merged_df)
+
+# Instantiate dashboards
+product_category_dashboard = ProductCategoryPerformanceDashboard(data_processor.merged_df if data_processor else merged_df)
+customer_behavior_dashboard = CustomerBehaviorDashboard(data_processor.merged_df if data_processor else merged_df)
 
 # Define the layout of the application
 app.layout = html.Div([
     html.H1('Instacart Market Basket Analysis Dashboard', 
             style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '30px'}),
-    
-    dcc.Tabs(id='main-tabs', value='tab-0', children=[
-        # Basic Analysis Tab
-        dcc.Tab(label='Basic Analysis', value='tab-0', children=[
-    # Container for filters and controls
-    html.Div([
-        # Department Dropdown
-        html.Div([
-            html.Label('Select Department:'),
-            dcc.Dropdown(
-                id='department-dropdown',
-                options=[{'label': dept, 'value': dept} 
-                                for dept in departments_dropdown_df['department'].unique()],
-                        value=departments_dropdown_df['department'].iloc[0],
-                style={'width': '100%'}
-            )
-        ], style={'width': '30%', 'display': 'inline-block', 'margin': '10px'}),
-        
-        # Product Count Slider
-        html.Div([
-            html.Label('Minimum Product Count:'),
-            dcc.Slider(
-                id='product-count-slider',
-                min=1,
-                max=100,
-                step=1,
-                value=10,
-                marks={i: str(i) for i in range(0, 101, 10)},
-            )
-                ], style={'width': '30%', 'display': 'inline-block', 'margin': '10px'}),
-                
-                # Day of Week Dropdown
-                html.Div([
-                    html.Label('Day of Week:'),
-                    dcc.Dropdown(
-                        id='day-dropdown',
-                        options=[{'label': day, 'value': day} for day in DAYS_OF_WEEK],
-                        value='All Time',
-                        style={'width': '100%'}
-                    )
-                ], style={'width': '30%', 'display': 'inline-block', 'margin': '10px'})
-    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
-    
-            # Container for basic analysis graphs
-    html.Div([
-        # Top Products Bar Chart
-        html.Div([
-            dcc.Graph(id='top-products-chart')
-        ], style={'width': '50%', 'display': 'inline-block'}),
-        
-        # Department Distribution Pie Chart
-        html.Div([
-            dcc.Graph(id='department-distribution-chart')
-        ], style={'width': '50%', 'display': 'inline-block'})
-            ]),
-            
-            # Heatmap
-            html.Div([
-                dcc.Graph(id='orders-heatmap')
-            ], style={'width': '100%', 'display': 'inline-block', 'marginTop': '40px'}),
-        ]),
-        
-        # Market Basket Analysis Tab
-        dcc.Tab(label='Market Basket Analysis', value='tab-1', children=[
-            html.Div([
-                # Header with explanation
-                html.Div([
-                    html.H2('Market Basket Analysis - Product Association Insights', 
-                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '10px'}),
-                    html.P('Discover which products customers buy together and identify cross-selling opportunities', 
-                          style={'textAlign': 'center', 'color': '#7f8c8d', 'marginBottom': '30px'})
-                ]),
-                
-                # Controls for market basket analysis
-                html.Div([
-                    html.Div([
-                        html.Label('Minimum Support (How often items appear together):', 
-                                 style={'fontWeight': 'bold', 'marginBottom': '5px'}),
-                        dcc.Slider(
-                            id='support-slider',
-                            min=0.001,
-                            max=0.02,
-                            step=0.001,
-                            value=0.001,
-                            marks={
-                                0.001: '0.1%',
-                                0.002: '0.2%',
-                                0.005: '0.5%',
-                                0.01: '1%',
-                                0.02: '2%'
-                            },
-                            tooltip={'placement': 'bottom', 'always_visible': True}
-                        ),
-                        html.Div(id='support-explanation', 
-                                style={'fontSize': '12px', 'color': '#7f8c8d', 'marginTop': '5px'})
-                    ], style={'width': '48%', 'display': 'inline-block', 'marginRight': '2%'}),
-                    
-                    html.Div([
-                        html.Label('Minimum Confidence (How reliable the association is):', 
-                                 style={'fontWeight': 'bold', 'marginBottom': '5px'}),
-                        dcc.Slider(
-                            id='confidence-slider',
-                            min=0.1,
-                            max=0.5,
-                            step=0.1,
-                            value=0.1,
-                            marks={
-                                0.1: '10%',
-                                0.2: '20%',
-                                0.3: '30%',
-                                0.4: '40%',
-                                0.5: '50%'
-                            },
-                            tooltip={'placement': 'bottom', 'always_visible': True}
-                        ),
-                        html.Div(id='confidence-explanation', 
-                                style={'fontSize': '12px', 'color': '#7f8c8d', 'marginTop': '5px'})
-                    ], style={'width': '48%', 'display': 'inline-block', 'marginLeft': '2%'})
-                ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px', 'marginBottom': '20px'}),
-                
-                # Metrics Explanation
-                html.Div([
-                    html.H4('📊 Understanding the Metrics', style={'color': '#2c3e50', 'marginBottom': '15px'}),
-                    html.Div([
-                        html.Div([
-                            html.H5('Support', style={'color': '#3498db', 'marginBottom': '5px'}),
-                            html.P('How frequently items appear together in transactions. Higher support = more common combinations.', 
-                                  style={'fontSize': '14px', 'color': '#7f8c8d'})
-                        ], style={'width': '32%', 'display': 'inline-block', 'marginRight': '1%'}),
-                        html.Div([
-                            html.H5('Confidence', style={'color': '#e74c3c', 'marginBottom': '5px'}),
-                            html.P('How reliable the association is. If A is bought, how likely is B also bought?', 
-                                  style={'fontSize': '14px', 'color': '#7f8c8d'})
-                        ], style={'width': '32%', 'display': 'inline-block', 'marginRight': '1%'}),
-                        html.Div([
-                            html.H5('Lift', style={'color': '#27ae60', 'marginBottom': '5px'}),
-                            html.P('Strength of association. Lift > 1 = positive association, Lift > 2 = strong association.', 
-                                  style={'fontSize': '14px', 'color': '#7f8c8d'})
-                        ], style={'width': '32%', 'display': 'inline-block', 'marginLeft': '1%'})
-                    ])
-                ], style={'padding': '15px', 'backgroundColor': '#ecf0f1', 'borderRadius': '5px', 'marginBottom': '20px'}),
-                
-                # Key Metrics Summary
-                html.Div([
-                    html.H3('Key Insights Summary', style={'color': '#2c3e50', 'marginBottom': '15px'}),
-                    html.Div(id='market-basket-summary', 
-                            style={'padding': '15px', 'backgroundColor': '#e8f4f8', 'borderRadius': '5px'})
-                ], style={'marginBottom': '20px'}),
-                
-                # Main Visualizations
-                html.Div([
-                    # Top Product Associations
-                    html.Div([
-                        html.H4('Top Product Associations by Business Impact', 
-                               style={'color': '#2c3e50', 'marginBottom': '10px'}),
-                        dcc.Graph(id='top-associations-chart')
-                    ], style={'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'}),
-                    
-                    # Association Network
-                    html.Div([
-                        html.H4('Product Association Network', 
-                               style={'color': '#2c3e50', 'marginBottom': '10px'}),
-                        dcc.Graph(id='association-network-chart')
-                    ], style={'width': '50%', 'display': 'inline-block', 'verticalAlign': 'top'})
-                ], style={'marginBottom': '20px'}),
-                
-                # Department-Level Insights
-                html.Div([
-                    html.H4('Department-Level Associations', 
-                           style={'color': '#2c3e50', 'marginBottom': '10px'}),
-                    dcc.Graph(id='department-associations-chart')
-                ], style={'marginBottom': '20px'}),
-                
-                # Business Recommendations
-                html.Div([
-                    html.H3('Business Recommendations', style={'color': '#2c3e50', 'marginBottom': '15px'}),
-                    html.Div(id='business-recommendations', 
-                            style={'padding': '20px', 'backgroundColor': '#e8f4f8', 'borderRadius': '5px'})
-                ], style={'marginBottom': '20px'}),
-                
-                # Actionable Insights
-                html.Div([
-                    html.H3('Actionable Insights', style={'color': '#2c3e50', 'marginBottom': '15px'}),
-                    html.Div([
-                        html.Div([
-                            html.H4('🎯 Cross-Selling Opportunities', style={'color': '#27ae60', 'marginBottom': '10px'}),
-                            html.P('Products that customers frequently buy together - perfect for bundling and recommendations', 
-                                  style={'color': '#7f8c8d', 'marginBottom': '15px'}),
-                            html.Div(id='cross-selling-insights', style={'fontSize': '14px'})
-                        ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top', 'marginRight': '2%'}),
-                        
-                        html.Div([
-                            html.H4('📊 Inventory Planning', style={'color': '#e74c3c', 'marginBottom': '10px'}),
-                            html.P('Use association patterns to optimize inventory levels and reduce stockouts', 
-                                  style={'color': '#7f8c8d', 'marginBottom': '15px'}),
-                            html.Div(id='inventory-insights', style={'fontSize': '14px'})
-                        ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top', 'marginLeft': '2%'})
-                    ])
-                ], style={'marginBottom': '20px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
-                
-                # Detailed Rules Table
-                html.Div([
-                    html.H4('Detailed Association Rules', 
-                           style={'color': '#2c3e50', 'marginBottom': '10px'}),
-                    html.Div([
-                        html.Label('Filter by Minimum Lift:', style={'marginRight': '10px'}),
-                        dcc.Dropdown(
-                            id='lift-filter',
-                            options=[
-                                {'label': 'All Rules', 'value': 0},
-                                {'label': 'Lift > 1.5', 'value': 1.5},
-                                {'label': 'Lift > 2.0', 'value': 2.0},
-                                {'label': 'Lift > 3.0', 'value': 3.0}
-                            ],
-                            value=0,
-                            style={'width': '200px', 'display': 'inline-block'}
-                        )
-                    ], style={'marginBottom': '15px'}),
-                    html.Div(id='association-rules-table', 
-                            style={'maxHeight': '400px', 'overflowY': 'auto'})
-                ])
-            ], style={'padding': '20px'})
-        ]),
-        
-        # Price Analysis Tab (only show if price_analyzer is initialized)
-        dcc.Tab(label='Price Analysis', value='tab-3', children=[
-            html.Div([
-                html.Div([
-                    html.H2('Price Analysis and Customer Spending Patterns', 
-                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
-                    dcc.Graph(
-                        id='price-analysis-graph',
-                        figure=go.Figure()  # Start with empty figure
-                    ),
-                    html.Div(id='price-analysis-insights', 
-                            style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
-                    html.Div(id='price-analysis-recommendations',
-                            style={'padding': '20px', 'backgroundColor': '#e8f4f8', 'borderRadius': '5px', 'marginTop': '20px'})
-                ]) if price_analyzer else html.Div("Price analysis is not available. Please check the logs for details.")
-            ], style={'padding': '20px'})
-        ]),
-        
-        # Data Stories Tab (only show if storyteller is initialized)
-        dcc.Tab(label='Data Stories', value='tab-4', children=[
-            html.Div([
-                html.Div([
-                    html.H2('Customer Journey Insights', 
-                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
-                    dcc.Graph(figure=storyteller.create_story_visualization('customer_journey') if storyteller else go.Figure()),
-                    html.Div([
-                        html.Div([
-                            html.H3(section['title'], 
-                                   style={'color': '#2c3e50', 'marginBottom': '10px'}),
-                            html.Ul([
-                                html.Li(insight, style={'marginBottom': '5px'})
-                                for insight in section['insights']
-                            ])
-                        ], style={'marginBottom': '20px'})
-                        for section in (storyteller.generate_customer_journey_story()['sections'] if storyteller else [])
-                    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'})
-                ], style={'marginBottom': '40px'}) if storyteller else html.Div("Customer journey analysis is not available. Please check the logs for details."),
-                
-                html.Div([
-                    html.H2('Seasonal Trends Analysis', 
-                           style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': '20px'}),
-                    dcc.Graph(figure=storyteller.create_story_visualization('seasonal_trends') if storyteller else go.Figure()),
-                    html.Div([
-                        html.Div([
-                            html.H3(section['title'], 
-                                   style={'color': '#2c3e50', 'marginBottom': '10px'}),
-                            html.Ul([
-                                html.Li(insight, style={'marginBottom': '5px'})
-                                for insight in section['insights']
-                            ])
-                        ], style={'marginBottom': '20px'})
-                        for section in (storyteller.generate_seasonal_trends_story()['sections'] if storyteller else [])
-                    ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'})
-                ], style={'marginBottom': '40px'})
-            ], style={'padding': '20px'})
-        ]) if storyteller else None,
-        
-        # KPI Dashboard Tab
-        dcc.Tab(label='Business KPIs', value='tab-5', children=[
-            kpi_dashboard.create_dashboard_layout()
-        ])
+    dcc.Tabs(id='main-tabs', value='tab-executive', children=[
+        get_executive_dashboard_tab_layout(executive_dashboard),
+        get_product_category_performance_tab_layout(product_category_dashboard),
+        get_customer_behavior_tab_layout(customer_behavior_dashboard),
+        get_basic_analysis_tab_layout(departments_dropdown_df, DAYS_OF_WEEK),
+        get_market_basket_tab_layout(),
+        get_price_analysis_tab_layout(data_processor),
+        get_data_stories_tab_layout(storyteller),
+        get_kpi_dashboard_tab_layout(kpi_dashboard)
     ]),
-    
-    # Hidden div for storing intermediate data
     html.Div(id='intermediate-data', style={'display': 'none'})
 ])
+
+# Register callbacks for each tab
+register_basic_analysis_callbacks(app, merged_df, DOW_MAP, HOUR_LABELS, logger)
+register_market_basket_callbacks(app, merged_df, logger)
+register_price_analysis_callbacks(app, data_processor, logger)
+# Data Stories and KPI Dashboard handle their own content internally
 
 # Add error handling for callbacks
 def safe_callback(func):
@@ -466,10 +192,6 @@ def safe_callback(func):
             # Return empty figures with error message
             return px.scatter(title=f"Error: {str(e)}")
     return wrapper
-
-# Define callback functions
-# Callbacks are the heart of Dash's interactivity
-# They define how the app responds to user input
 
 @server.route('/health')
 def health_check():
@@ -506,4 +228,11 @@ def internal_error(error):
         'timestamp': datetime.now().isoformat()
     }), 500
 
-# Add callback for price analysis tab
+if __name__ == '__main__':
+    logger.info("Starting Instacart Market Basket Analysis Dashboard...")
+    app.run_server(
+        debug=True,
+        host='0.0.0.0',
+        port=8050,
+        use_reloader=False
+    )
