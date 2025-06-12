@@ -120,7 +120,7 @@ class ExecutiveDashboard:
         return [
             # Total Revenue KPI
             html.Div([
-                html.Div('🧾', style={'fontSize': '2em', 'textAlign': 'center'}),
+                html.Div('', style={'fontSize': '2em', 'textAlign': 'center'}),
                 html.H3('Total Revenue', style={'textAlign': 'center', 'margin': '10px 0'}),
                 html.H2(f'${self.kpis["total_revenue"]:,.0f}', 
                        style={'textAlign': 'center', 'color': '#27ae60'})
@@ -128,7 +128,7 @@ class ExecutiveDashboard:
             
             # Average Order Value KPI
             html.Div([
-                html.Div('💳', style={'fontSize': '2em', 'textAlign': 'center'}),
+                html.Div('', style={'fontSize': '2em', 'textAlign': 'center'}),
                 html.H3('Average Order Value', style={'textAlign': 'center', 'margin': '10px 0'}),
                 html.H2(f'${self.kpis["aov"]:.2f}', 
                        style={'textAlign': 'center', 'color': '#3498db'})
@@ -136,7 +136,7 @@ class ExecutiveDashboard:
             
             # Total Orders KPI
             html.Div([
-                html.Div('📦', style={'fontSize': '2em', 'textAlign': 'center'}),
+                html.Div('', style={'fontSize': '2em', 'textAlign': 'center'}),
                 html.H3('Total Orders', style={'textAlign': 'center', 'margin': '10px 0'}),
                 html.H2(f'{self.kpis["total_orders"]:,}', 
                        style={'textAlign': 'center', 'color': '#e74c3c'})
@@ -144,7 +144,7 @@ class ExecutiveDashboard:
             
             # Total Unique Customers KPI
             html.Div([
-                html.Div('👥', style={'fontSize': '2em', 'textAlign': 'center'}),
+                html.Div('', style={'fontSize': '2em', 'textAlign': 'center'}),
                 html.H3('Unique Customers', style={'textAlign': 'center', 'margin': '10px 0'}),
                 html.H2(f'{self.kpis["unique_customers"]:,}', 
                        style={'textAlign': 'center', 'color': '#9b59b6'})

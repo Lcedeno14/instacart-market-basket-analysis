@@ -57,14 +57,14 @@ A comprehensive data analysis and visualization dashboard for Instacart order da
 
 ## Tab Order
 
-1. **📊 Executive Dashboard** - High-level business overview
-2. **Product & Category Performance** - Product and category insights
-3. **Customer Behavior & Reordering** - Behavioral patterns & customer segmentation
-4. **Basic Analysis** - Fundamental order and department analysis
-5. **Market Basket Analysis** - Product association and recommendation analysis
-6. **Price Analysis** - Price distribution and analysis
-7. **Data Stories** - Narrative insights and automated analysis
-8. **Business KPIs** - Key performance indicators dashboard
+1. Executive Dashboard - High-level business overview
+2. Product & Category Performance - Product and category insights
+3. Customer Behavior & Reordering - Behavioral patterns & customer segmentation
+4. Basic Analysis - Fundamental order and department analysis
+5. Market Basket Analysis - Product association and recommendation analysis
+6. Price Analysis - Price distribution and analysis
+7. Data Stories - Narrative insights and automated analysis
+8. Business KPIs - Key performance indicators dashboard
 
 ## 📡 API Integration
 
