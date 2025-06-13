@@ -9,9 +9,9 @@ import plotly.express as px
 import pandas as pd
 import numpy as np
 import os
-import logging
+
 from sqlalchemy import create_engine
-from mlxtend.frequent_patterns import apriori, association_rules, fpgrowth
+
 from mlxtend.preprocessing import TransactionEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
@@ -23,13 +23,10 @@ from src.analysis.data_storytelling import DataStorytelling
 from src.analysis.data_processor import DataProcessor
 import plotly.graph_objects as go
 from src.analysis.metrics import BusinessMetrics
-from src.visualization.kpi_dashboard import KPIDashboard
 import time
-from src.tabs.basic_analysis_tab import get_basic_analysis_tab_layout, register_basic_analysis_callbacks
 from src.tabs.market_basket_tab import get_market_basket_tab_layout, register_market_basket_callbacks
 from src.tabs.price_analysis_tab import get_price_analysis_tab_layout, register_price_analysis_callbacks
 from src.tabs.data_stories_tab import get_data_stories_tab_layout
-from src.tabs.kpi_dashboard_tab import get_kpi_dashboard_tab_layout
 from src.tabs.executive_dashboard_tab import get_executive_dashboard_tab_layout, ExecutiveDashboard
 from src.tabs.product_category_performance_tab import get_product_category_performance_tab_layout, ProductCategoryPerformanceDashboard
 from src.tabs.customer_behavior_tab import get_customer_behavior_tab_layout, CustomerBehaviorDashboard
@@ -147,7 +144,6 @@ departments_dropdown_df = pd.concat([all_departments_option, departments_df], ig
 
 # Initialize metrics
 metrics = BusinessMetrics(data_processor.merged_df if data_processor else merged_df)
-kpi_dashboard = KPIDashboard(metrics)
 
 # Initialize Executive Dashboard with the same data source as KPI Dashboard
 executive_dashboard = ExecutiveDashboard(data_processor.merged_df if data_processor else merged_df)
@@ -164,20 +160,17 @@ app.layout = html.Div([
         get_executive_dashboard_tab_layout(executive_dashboard),
         get_product_category_performance_tab_layout(product_category_dashboard),
         get_customer_behavior_tab_layout(customer_behavior_dashboard),
-        get_basic_analysis_tab_layout(departments_dropdown_df, DAYS_OF_WEEK),
         get_market_basket_tab_layout(),
         get_price_analysis_tab_layout(data_processor),
-        get_data_stories_tab_layout(storyteller),
-        get_kpi_dashboard_tab_layout(kpi_dashboard)
+        get_data_stories_tab_layout(storyteller)
     ]),
     html.Div(id='intermediate-data', style={'display': 'none'})
 ])
 
 # Register callbacks for each tab
-register_basic_analysis_callbacks(app, merged_df, DOW_MAP, HOUR_LABELS, logger)
 register_market_basket_callbacks(app, merged_df, logger)
 register_price_analysis_callbacks(app, data_processor, logger)
-# Data Stories and KPI Dashboard handle their own content internally
+# Data Stories handle their own content internally
 
 # Add error handling for callbacks
 def safe_callback(func):
