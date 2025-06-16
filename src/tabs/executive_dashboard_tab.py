@@ -380,7 +380,7 @@ class ExecutiveDashboard:
             
             # Weekly Trends Section
             html.Div([
-                html.H3('📈 Weekly Orders & Revenue Trends', 
+                html.H3('Weekly Orders & Revenue Trends', 
                        style={'textAlign': 'center', 'marginBottom': '20px'}),
                 html.P('Are more orders also bringing in more money?', 
                       style={'textAlign': 'center', 'color': '#7f8c8d', 'marginBottom': '20px'}),
@@ -389,7 +389,7 @@ class ExecutiveDashboard:
             
             # Hourly Trends Section
             html.Div([
-                html.H3('⏰ Hourly Orders & Revenue by Day of Week', 
+                html.H3('Hourly Orders & Revenue by Day of Week', 
                        style={'textAlign': 'center', 'marginBottom': '20px'}),
                 html.P('Which hours bring high traffic vs. high spending?', 
                       style={'textAlign': 'center', 'color': '#7f8c8d', 'marginBottom': '20px'}),
@@ -426,7 +426,7 @@ def get_executive_dashboard_tab_layout(executive_dashboard=None):
     """Create the layout for the Executive Dashboard tab"""
     
     return dcc.Tab(
-        label='📊 Executive Dashboard',
+        label='Executive Dashboard',
         value='tab-executive',
         children=[
             executive_dashboard.create_dashboard_layout() if executive_dashboard else html.Div("Executive Dashboard is not available. Please check the logs for details.")

@@ -126,12 +126,14 @@ class ProductCategoryPerformanceDashboard:
         fig1 = go.Figure()
         if not self.top_products_by_revenue.empty:
             fig1.add_trace(go.Bar(
-                x=self.top_products_by_revenue['product_name'],
-                y=self.top_products_by_revenue['price'],
+                y=self.top_products_by_revenue['product_name'],
+                x=self.top_products_by_revenue['price'],
+                orientation='h',
                 marker_color='#27ae60',
                 name='Revenue'
             ))
-            fig1.update_layout(title='Top 10 Products by Revenue', xaxis_title='Product', yaxis_title='Revenue ($)', height=350)
+            fig1.update_layout(title='Top 10 Products by Revenue', yaxis_title='Product', xaxis_title='Revenue ($)', height=350)
+            fig1.update_layout(yaxis=dict(autorange='reversed'))
         else:
             fig1.add_annotation(
                 text="No price data available",
@@ -145,12 +147,14 @@ class ProductCategoryPerformanceDashboard:
         fig2 = go.Figure()
         if not self.top_products_by_orders.empty:
             fig2.add_trace(go.Bar(
-                x=self.top_products_by_orders['product_name'],
-                y=self.top_products_by_orders['order_count'],
+                y=self.top_products_by_orders['product_name'],
+                x=self.top_products_by_orders['order_count'],
+                orientation='h',
                 marker_color='#3498db',
                 name='Order Count'
             ))
-            fig2.update_layout(title='Top 10 Products by Orders', xaxis_title='Product', yaxis_title='Order Count', height=350)
+            fig2.update_layout(title='Top 10 Products by Orders', yaxis_title='Product', xaxis_title='Order Count', height=350)
+            fig2.update_layout(yaxis=dict(autorange='reversed'))
         else:
             fig2.add_annotation(
                 text="No order data available",
@@ -173,21 +177,25 @@ class ProductCategoryPerformanceDashboard:
         fig1 = go.Figure()
         if not self.top_reordered_by_revenue.empty:
             fig1.add_trace(go.Bar(
-                x=self.top_reordered_by_revenue['product_name'],
-                y=self.top_reordered_by_revenue['price'],
+                y=self.top_reordered_by_revenue['product_name'],
+                x=self.top_reordered_by_revenue['price'],
+                orientation='h',
                 marker_color='#e67e22',
                 name='Revenue'
             ))
-            fig1.update_layout(title='Top 10 Reordered Products by Revenue', xaxis_title='Product', yaxis_title='Revenue ($)', height=350)
+            fig1.update_layout(title='Top 10 Reordered Products by Revenue', yaxis_title='Product', xaxis_title='Revenue ($)', height=350)
+            fig1.update_layout(yaxis=dict(autorange='reversed'))
         fig2 = go.Figure()
         if not self.top_reordered_by_orders.empty:
             fig2.add_trace(go.Bar(
-                x=self.top_reordered_by_orders['product_name'],
-                y=self.top_reordered_by_orders['order_count'],
+                y=self.top_reordered_by_orders['product_name'],
+                x=self.top_reordered_by_orders['order_count'],
+                orientation='h',
                 marker_color='#9b59b6',
                 name='Order Count'
             ))
-            fig2.update_layout(title='Top 10 Reordered Products by Orders', xaxis_title='Product', yaxis_title='Order Count', height=350)
+            fig2.update_layout(title='Top 10 Reordered Products by Orders', yaxis_title='Product', xaxis_title='Order Count', height=350)
+            fig2.update_layout(yaxis=dict(autorange='reversed'))
         return html.Div([
             html.H4('Top 10 Reordered Products: Revenue vs. Orders'),
             html.Div([
@@ -201,21 +209,25 @@ class ProductCategoryPerformanceDashboard:
         fig1 = go.Figure()
         if not self.top_departments_by_revenue.empty:
             fig1.add_trace(go.Bar(
-                x=self.top_departments_by_revenue['department'],
-                y=self.top_departments_by_revenue['price'],
+                y=self.top_departments_by_revenue['department'],
+                x=self.top_departments_by_revenue['price'],
+                orientation='h',
                 marker_color='#16a085',
                 name='Revenue'
             ))
-            fig1.update_layout(title='Top 10 Departments by Revenue', xaxis_title='Department', yaxis_title='Revenue ($)', height=350)
+            fig1.update_layout(title='Top 10 Departments by Revenue', yaxis_title='Department', xaxis_title='Revenue ($)', height=350)
+            fig1.update_layout(yaxis=dict(autorange='reversed'))
         fig2 = go.Figure()
         if not self.top_departments_by_orders.empty:
             fig2.add_trace(go.Bar(
-                x=self.top_departments_by_orders['department'],
-                y=self.top_departments_by_orders['order_count'],
+                y=self.top_departments_by_orders['department'],
+                x=self.top_departments_by_orders['order_count'],
+                orientation='h',
                 marker_color='#2980b9',
                 name='Order Count'
             ))
-            fig2.update_layout(title='Top 10 Departments by Orders', xaxis_title='Department', yaxis_title='Order Count', height=350)
+            fig2.update_layout(title='Top 10 Departments by Orders', yaxis_title='Department', xaxis_title='Order Count', height=350)
+            fig2.update_layout(yaxis=dict(autorange='reversed'))
         return html.Div([
             html.H4('Top 10 Departments: Revenue vs. Orders'),
             html.Div([
@@ -229,21 +241,25 @@ class ProductCategoryPerformanceDashboard:
         fig1 = go.Figure()
         if not self.top_aisles_by_revenue.empty:
             fig1.add_trace(go.Bar(
-                x=self.top_aisles_by_revenue['aisle'],
-                y=self.top_aisles_by_revenue['price'],
+                y=self.top_aisles_by_revenue['aisle'],
+                x=self.top_aisles_by_revenue['price'],
+                orientation='h',
                 marker_color='#f39c12',
                 name='Revenue'
             ))
-            fig1.update_layout(title='Top 10 Aisles by Revenue', xaxis_title='Aisle', yaxis_title='Revenue ($)', height=350)
+            fig1.update_layout(title='Top 10 Aisles by Revenue', yaxis_title='Aisle', xaxis_title='Revenue ($)', height=350)
+            fig1.update_layout(yaxis=dict(autorange='reversed'))
         fig2 = go.Figure()
         if not self.top_aisles_by_orders.empty:
             fig2.add_trace(go.Bar(
-                x=self.top_aisles_by_orders['aisle'],
-                y=self.top_aisles_by_orders['order_count'],
+                y=self.top_aisles_by_orders['aisle'],
+                x=self.top_aisles_by_orders['order_count'],
+                orientation='h',
                 marker_color='#8e44ad',
                 name='Order Count'
             ))
-            fig2.update_layout(title='Top 10 Aisles by Orders', xaxis_title='Aisle', yaxis_title='Order Count', height=350)
+            fig2.update_layout(title='Top 10 Aisles by Orders', yaxis_title='Aisle', xaxis_title='Order Count', height=350)
+            fig2.update_layout(yaxis=dict(autorange='reversed'))
         return html.Div([
             html.H4('Top 10 Aisles: Revenue vs. Orders'),
             html.Div([
@@ -257,12 +273,14 @@ class ProductCategoryPerformanceDashboard:
         fig = go.Figure()
         if not self.most_expensive_products.empty:
             fig.add_trace(go.Bar(
-                x=self.most_expensive_products['product_name'],
-                y=self.most_expensive_products['price'],
+                y=self.most_expensive_products['product_name'],
+                x=self.most_expensive_products['price'],
+                orientation='h',
                 marker_color='#c0392b',
                 name='Max Price'
             ))
-            fig.update_layout(title='Most Expensive Purchased Products', xaxis_title='Product', yaxis_title='Max Price ($)', height=350)
+            fig.update_layout(title='Most Expensive Purchased Products', yaxis_title='Product', xaxis_title='Max Price ($)', height=350)
+            fig.update_layout(yaxis=dict(autorange='reversed'))
         return html.Div([
             html.H4('Most Expensive Purchased Products'),
             dcc.Graph(figure=fig),

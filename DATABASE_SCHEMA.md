@@ -1,7 +1,6 @@
 # Instacart Database Schema
 
 ## Entity Relationship Diagram
-
 ```mermaid
 erDiagram
     orders {
